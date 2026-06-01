@@ -1,0 +1,30 @@
+use_default_settings: true
+
+server:
+  # Secret key is injected via SEARXNG_SECRET env var (set in .env)
+  # Do not hardcode a real value here -- this file is committed to git.
+  bind_address: "0.0.0.0:8080"
+  # Disable IP-based bot limiter -- this instance is only reachable inside the
+  # Docker network and no reverse proxy sets X-Forwarded-For.
+  limiter: false
+
+search:
+  safe_search: 0
+  default_lang: "en"
+  formats:
+    - html
+    - json
+
+engines:
+  - name: google
+    engine: google
+    shortcut: g
+
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: d
+
+  - name: wikipedia
+    engine: wikipedia
+    shortcut: wp
+    base_url: "https://en.wikipedia.org/"

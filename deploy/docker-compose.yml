@@ -1,0 +1,127 @@
+services:
+  bot:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: ../.env
+    volumes:
+      - sqlite_data:/data
+      - notes_data:/srv/notes
+    depends_on:
+      memory:
+        condition: service_healthy
+      searxng:
+        condition: service_started
+      vikunja:
+        condition: service_started
+    networks:
+      - assistant_net
+
+  memory:
+    image: doobidoo/mcp-memory-service:latest
+    restart: unless-stopped
+    environment:
+      # Streamable HTTP transport — the only MCP transport pydantic-ai's
+      # MCPServerStreamableHTTP speaks. Port matches MEMORY_SERVICE_URL in .env.
+      MCP_MODE: streamable-http
+      MCP_SSE_PORT: "8001"
+      # The image bakes in MCP_MEMORY_SQLITE_PATH=/app/sqlite_db and
+      # MCP_MEMORY_BACKUPS_PATH=/app/backups, both outside the volume mount.
+      # Override them to /app/data so all state survives container restarts.
+      MCP_MEMORY_SQLITE_PATH: /app/data/sqlite_vec.db
+      MCP_MEMORY_BACKUPS_PATH: /app/data/backups
+      MCP_MEMORY_BASE_DIR: /app/data
+    volumes:
+      - memory_data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    networks:
+      - assistant_net
+
+  searxng:
+    image: searxng/searxng:latest
+    restart: unless-stopped
+    environment:
+      SEARXNG_SECRET: ${SEARXNG_SECRET}
+    volumes:
+      - ./searxng:/etc/searxng
+    networks:
+      - assistant_net
+
+  vikunja_init:
+    image: alpine:latest
+    # Runs once before vikunja starts to ensure uid=1000 (vikunja process) owns the data volume.
+    # Needed because named volumes are created root-owned by Docker and vikunja drops privileges.
+    command: chown -R 1000:1000 /app/data
+    volumes:
+      - vikunja_data:/app/data
+    restart: "no"
+    networks:
+      - assistant_net
+
+  vikunja:
+    image: vikunja/vikunja:latest
+    restart: unless-stopped
+    environment:
+      VIKUNJA_DATABASE_TYPE: mysql
+      VIKUNJA_DATABASE_HOST: vikunja_db
+      VIKUNJA_DATABASE_NAME: vikunja
+      VIKUNJA_DATABASE_USER: vikunja
+      VIKUNJA_DATABASE_PASSWORD: ${VIKUNJA_DB_PASSWORD}
+      VIKUNJA_SERVICE_PUBLICURL: ${VIKUNJA_SERVICE_PUBLICURL:-http://localhost:3456}
+      # Redirect file storage into the mounted volume (default /app/vikunja/files is not writable)
+      VIKUNJA_FILES_BASEPATH: /app/data/files
+    volumes:
+      - vikunja_data:/app/data
+    depends_on:
+      vikunja_db:
+        condition: service_healthy
+      vikunja_init:
+        condition: service_completed_successfully
+    networks:
+      - assistant_net
+
+  vikunja_db:
+    image: mariadb:10
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: vikunja
+      MYSQL_USER: vikunja
+      MYSQL_PASSWORD: ${VIKUNJA_DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${VIKUNJA_DB_ROOT_PASSWORD}
+    volumes:
+      - vikunja_db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - assistant_net
+
+  syncthing:
+    image: syncthing/syncthing:latest
+    restart: unless-stopped
+    volumes:
+      - notes_data:/var/syncthing
+    ports:
+      - "22000:22000"
+      - "8384:8384"
+    networks:
+      - assistant_net
+
+volumes:
+  sqlite_data:
+  notes_data:
+  memory_data:
+  vikunja_data:
+  vikunja_db_data:
+
+networks:
+  assistant_net:
+    driver: bridge

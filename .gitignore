@@ -1,0 +1,29 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Tool caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Environment — never commit real secrets
+.env
+
+# Google OAuth token (written at runtime)
+google_token.json
+
+# Editor
+.idea/
+.vscode/
+
+# Data volumes (local dev)
+data/
+notes/

@@ -1,0 +1,24 @@
+# Local development overrides
+# This file is NOT committed — copy from docker-compose.override.yml.example if needed
+services:
+  bot:
+    # Mount source for live reload during development
+    volumes:
+      - ../src:/app/src
+    environment:
+      LOG_LEVEL: DEBUG
+
+  vikunja:
+    # Expose Vikunja web UI on localhost for local setup and token creation
+    ports:
+      - "3456:3456"
+
+# Bind-mount notes_data to ~/notes so files are accessible from Windows at
+# \\wsl$\Ubuntu\home\<user>\notes without needing Syncthing locally.
+volumes:
+  notes_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: "${HOME}/notes"
