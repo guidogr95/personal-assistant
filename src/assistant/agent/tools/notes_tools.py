@@ -34,9 +34,15 @@ def register_notes_tools(agent: Agent[None, str]) -> None:
     async def create_note(ctx: RunContext[None], title: str, content: str) -> str:
         """Create a new Markdown note in the vault.
 
+        Before calling this tool, use ``search_notes`` to check whether a note
+        with the same or a very similar title already exists.  If a matching
+        note is found, use ``update_note`` instead of creating a duplicate.
+
         Args:
             title: Short descriptive title (becomes the H1 heading and filename).
-            content: Note body in Markdown format.
+            content: Note body in Markdown format.  Include only what the user
+                explicitly asked to write — do not add extra context, summaries,
+                or sections the user did not request.
         """
         note = await save_note(title, content, _repo)
         logger.info("create_note_tool", filename=note.filename)
@@ -73,13 +79,27 @@ def register_notes_tools(agent: Agent[None, str]) -> None:
     async def update_note(ctx: RunContext[None], filename: str, content: str) -> str:
         """Edit an existing note in place without changing its filename.
 
-        Use this when the user wants to change the content of a note they
-        already created.  The filename stays the same; only the content is
-        overwritten.
+        MANDATORY WORKFLOW — follow these steps in order:
+        1. Call ``read_note_by_name(filename)`` to fetch the current content.
+        2. Apply ONLY the change the user explicitly requested to that content.
+        3. Pass the COMPLETE modified content (all original sections intact) to
+           this tool.  Do not drop, summarise, or rewrite any section the user
+           did not mention.
+
+        The ``content`` parameter must be the ENTIRE note after your edit, not
+        just the changed fragment.  This tool performs a full overwrite — any
+        text you omit will be lost.
+
+        Do NOT call this tool:
+        - Without reading the note first.
+        - With content that omits sections the user did not ask to change.
+        - If the filename was not confirmed via ``list_notes_in_vault`` or
+          ``search_notes`` (filenames are generated; never guess them).
 
         Args:
             filename: Exact note filename (e.g. ``2025-01-15-my-note.md``).
-            content: New Markdown content for the note.
+            content: The COMPLETE new content of the note, including all
+                unmodified sections from the original.
 
         Returns:
             Confirmation message, or ``"Note not found: <filename>"`` if the

@@ -33,11 +33,14 @@ def register_task_tools(agent: Agent[None, str]) -> None:
     async def add_task(ctx: RunContext[None], title: str, due_date: str | None = None) -> str:
         """Create a task in Vikunja.
 
+        When the user specifies a relative due date ("by Friday", "tomorrow",
+        "in 3 days"), call ``get_current_time`` first to get today's date, then
+        compute the absolute date.  Do not guess the current date.
+
         Args:
             title: Short, actionable task description.
             due_date: Optional due date in ISO-8601 format (e.g. '2025-01-17T00:00:00Z').
-                      Convert natural language dates (\"by Friday\", \"tomorrow\") to
-                      ISO-8601 before calling this tool.
+                      Always compute from the result of ``get_current_time``.
         """
         if not settings.vikunja_api_token:
             return _NOT_CONFIGURED_MSG

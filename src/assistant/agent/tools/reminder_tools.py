@@ -39,20 +39,26 @@ def register_reminder_tools(agent: Agent[None, str]) -> None:
     async def set_reminder(ctx: RunContext[None], time_expr: str, message: str) -> str:
         """Set a reminder that sends a message at the specified time.
 
-        The time expression can be one-off or recurring.  The bot will send
-        the reminder message to Telegram automatically without any user prompt.
+        Always call ``get_current_time`` first.  The time expression is parsed
+        relative to the current server time, so you must know the current time
+        and timezone before interpreting expressions like "in 30 minutes" or
+        "tomorrow at 9am".  Do not guess the current time.
 
-        Examples of time_expr:
-        - "in 30 minutes" → one-off reminder 30 minutes from now
-        - "in 2 hours" → one-off reminder 2 hours from now
-        - "tomorrow at 9am" → one-off reminder at 09:00 tomorrow
-        - "next Monday at 8am" → one-off reminder next Monday 08:00
-        - "at 15:30 today" → one-off reminder at 15:30 today
-        - "every day at 9am" → recurring daily reminder at 09:00
-        - "every weekday at 8am" → recurring Monday–Friday at 08:00
+        The bot will send the reminder message to Telegram automatically without
+        any user prompt.  The time expression can be one-off or recurring.
+
+        Examples of time_expr (use the timezone from get_current_time):
+        - "in 30 minutes"        → one-off reminder 30 minutes from now
+        - "in 2 hours"           → one-off reminder 2 hours from now
+        - "tomorrow at 9am"      → one-off reminder at 09:00 tomorrow (local)
+        - "next Monday at 8am"   → one-off reminder next Monday 08:00 (local)
+        - "at 15:30 today"       → one-off reminder at 15:30 today (local)
+        - "every day at 9am"     → recurring daily reminder at 09:00 (local)
+        - "every weekday at 8am" → recurring Monday–Friday at 08:00 (local)
 
         Args:
             time_expr: Natural language time expression (see examples above).
+                Include the timezone context from get_current_time if relevant.
             message: The reminder text to send when the time arrives.
         """
         repo = _checkin_repo

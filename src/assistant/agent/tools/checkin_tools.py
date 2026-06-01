@@ -53,6 +53,11 @@ def register_checkin_tools(agent: Agent[None, str]) -> None:
 
         The bot will send output to Telegram automatically on the given schedule.
 
+        Always call ``get_current_time`` first.  All times are stored in UTC.
+        Use the offset reported by ``get_current_time`` to convert the user's
+        local time to UTC before setting ``cron_expr`` or ``fire_at``.
+        Do not guess the current time or timezone offset.
+
         Args:
             name: Short label for the check-in (e.g. "Morning Tasks").
             instructions: What the assistant should do when the check-in fires.
@@ -60,14 +65,13 @@ def register_checkin_tools(agent: Agent[None, str]) -> None:
                 "Summarise my open Vikunja tasks and flag any overdue ones."
             message: Direct message text to send (no LLM cost). Use this for
                 simple reminders. Example: "Call mom" or "Drink water".
-            cron_expr: Standard 5-field cron expression for recurring jobs.
-                - "every day at 9am"      → "0 9 * * *"
-                - "every weekday at 8am"  → "0 8 * * 1-5"
-                - "every Monday at 10am"  → "0 10 * * 1"
-                - "every hour"            → "0 * * * *"
-                All times are UTC.
-            fire_at: ISO-8601 datetime for a one-off job. Use this OR cron_expr,
-                not both. Example: "2026-06-01T14:30:00".
+            cron_expr: Standard 5-field cron expression for recurring jobs (UTC).
+                - "every day at 9am local"   → convert to UTC, e.g. "0 13 * * *"
+                - "every weekday at 8am"     → "0 8 * * 1-5" (after UTC conversion)
+                - "every Monday at 10am"     → "0 10 * * 1" (after UTC conversion)
+                - "every hour"               → "0 * * * *"
+            fire_at: ISO-8601 datetime (UTC) for a one-off job. Use this OR
+                cron_expr, not both. Example: "2026-06-01T14:30:00".
             max_runs: Maximum number of times this check-in fires before
                 auto-disabling. None = infinite. Set to 1 for one-off reminders.
         """

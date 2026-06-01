@@ -87,9 +87,7 @@ async def _fetch_mcp_tools() -> list[_McpTool] | None:
         return None
 
 
-def _build_summary_prompt(
-    python_tools: dict[str, str], mcp_tools: list[_McpTool] | None
-) -> str:
+def _build_summary_prompt(python_tools: dict[str, str], mcp_tools: list[_McpTool] | None) -> str:
     """Build the prompt sent to the LLM to produce a grouped tool summary.
 
     Args:
@@ -116,9 +114,7 @@ def _build_summary_prompt(
     return "\n".join(lines)
 
 
-def _build_fallback_html(
-    python_tools: dict[str, str], mcp_tools: list[_McpTool] | None
-) -> str:
+def _build_fallback_html(python_tools: dict[str, str], mcp_tools: list[_McpTool] | None) -> str:
     """Plain HTML listing used when AI summarisation fails.
 
     Args:
@@ -152,8 +148,7 @@ async def cmd_tools(message: Message) -> None:
     """
     try:
         python_tools: dict[str, str] = {
-            name: (tool.description or "")
-            for name, tool in agent._function_toolset.tools.items()
+            name: (tool.description or "") for name, tool in agent._function_toolset.tools.items()
         }
     except AttributeError:
         logger.warning("agent_function_tools_unavailable")

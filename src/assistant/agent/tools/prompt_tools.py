@@ -48,12 +48,25 @@ def register_prompt_tools(agent: Agent[None, str]) -> None:
     async def update_system_prompt(ctx: RunContext[None], new_prompt: str) -> str:
         """Replace the system prompt with new text.
 
-        Use this when the user asks you to change your behavior, e.g.
-        "Be more concise", "Always use bullet points", or "Stop saying
-        'I'm sorry to hear that'".
+        MANDATORY WORKFLOW — follow these steps in order:
+        1. Call ``show_system_prompt`` to fetch the current prompt text.
+        2. Apply ONLY the change the user explicitly requested to that text.
+        3. Pass the COMPLETE updated prompt to this tool.  Do not discard,
+           summarise, or remove any existing rule the user did not mention.
+
+        The ``new_prompt`` parameter must contain the ENTIRE prompt after your
+        edit, not just the changed fragment.  This tool performs a full
+        replacement — any rule you omit will be permanently lost.
+
+        Examples of what the user asks and what you should do:
+        - "Be more concise" → add a conciseness rule to the existing prompt
+        - "Stop apologising" → add a rule prohibiting apology phrases
+        - "Always use bullet points" → add a formatting rule
+        - In all cases: keep every other existing rule untouched.
 
         Args:
-            new_prompt: The complete new system prompt text.
+            new_prompt: The complete new system prompt text, including all
+                existing rules with only the requested change applied.
         """
         repo = _prompt_repo
         if repo is None:
