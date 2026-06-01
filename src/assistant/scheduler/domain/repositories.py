@@ -33,6 +33,11 @@ class ScheduledCheckInRepository(ABC):
         ...
 
     @abstractmethod
+    async def update(self, checkin: ScheduledCheckIn) -> None:
+        """Update an existing check-in record (full replace)."""
+        ...
+
+    @abstractmethod
     async def delete(self, checkin_id: str) -> None:
         """Permanently remove a check-in record."""
         ...

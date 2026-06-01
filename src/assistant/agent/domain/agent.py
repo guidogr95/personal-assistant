@@ -6,8 +6,10 @@ from pydantic_ai.providers.openai import OpenAIProvider
 
 from assistant.agent.tools.checkin_tools import register_checkin_tools
 from assistant.agent.tools.notes_tools import register_notes_tools
+from assistant.agent.tools.reminder_tools import register_reminder_tools
 from assistant.agent.tools.research_tools import register_research_tools
 from assistant.agent.tools.task_tools import register_task_tools
+from assistant.agent.tools.time_tools import register_time_tools
 from assistant.memory.infrastructure.memory_mcp_client import create_memory_mcp_server
 from assistant.shared.config import settings
 
@@ -38,7 +40,9 @@ agent: Agent[None, str] = Agent(
     toolsets=[_memory_server],
 )
 
+register_time_tools(agent)
 register_research_tools(agent)
 register_notes_tools(agent)
 register_task_tools(agent)
 register_checkin_tools(agent)
+register_reminder_tools(agent)

@@ -31,6 +31,14 @@ class NoteRepository(Protocol):
         """Return all note filenames, newest first."""
         ...
 
+    async def update(self, filename: str, content: str) -> Note | None:
+        """Overwrite ``filename`` with ``content`` and return the updated Note.
+
+        Returns:
+            The updated Note, or ``None`` if the file does not exist.
+        """
+        ...
+
     async def delete(self, filename: str) -> bool:
         """Remove ``filename`` from the vault.
 

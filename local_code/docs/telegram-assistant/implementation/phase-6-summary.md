@@ -83,6 +83,36 @@ Natural language check-in management was added beyond the original spec (approve
 
 ---
 
+## Post-Phase: VPS Deployment + Notes Sync Infrastructure (2026-06-01)
+
+After feature work was complete, the following fixes and infrastructure changes were made to bring the bot live on a remote VPS and enable cross-device notes sync.
+
+### Bug fix — delete-note sentinel not surfaced to Telegram
+
+`run_turn.py` was returning `result.output` as the reply string. pydantic-ai's `result.output` is always the LLM's generated text — when the delete-note confirmation keyboard triggered and the tool returned `DELETE_CONFIRM_SENTINEL`, the sentinel never reached the Telegram message handler. Fixed by scanning `result.new_messages()` for a `ToolReturnPart` whose content equals the sentinel and using it as the reply when found. `result.output` is used as the fallback for all normal turns.
+
+### VPS deployment
+
+Bot deployed to `~/Github/personal-assistant/` on the VPS. Production uses `deploy/docker-compose.yml` only (no override). Issues encountered and resolved:
+
+| Problem | Fix |
+|---------|-----|
+| `notes/` gitignore pattern excluded the source package | Added `!/src/**/notes/` negation to `.gitignore` |
+| `ModuleNotFoundError: assistant.notes` on VPS | `git pull && docker compose up -d --build bot` |
+| Vikunja SSH tunnel "connection refused" | Added `ports: ["127.0.0.1:3456:3456"]` to Vikunja service |
+| Syncthing UI publicly accessible | Changed `8384:8384` → `127.0.0.1:8384:8384` |
+| SearXNG `secret_key` hardcoded in `settings.yml` | Moved to `SEARXNG_SECRET` env var; `settings.yml` references it; added to `.env.example` |
+
+VPS Syncthing UI is only reachable via SSH tunnel: `ssh -L 8386:localhost:8384 root@<vps-ip>`.
+
+### Notes sync — Syncthing .stignore as infrastructure-as-code
+
+Syncthing syncs the `notes_data` Docker volume (mounted at `/var/syncthing/` inside the container). The `config/` subdirectory lives at that same root and must not be synced to other devices. A `.stignore` file containing `config` was added at `deploy/syncthing/.stignore` and bind-mounted into the container at `/var/syncthing/.stignore`. This ensures the ignore rule survives volume recreation and is version-controlled.
+
+Windows Syncthing paired with VPS; notes folder syncing and in sync.
+
+---
+
 ## Next: Phase 7 — Google Calendar + Android Alarms
 
 **Gate required before writing any code:** 30-minute manual device test (Tasker + AutoRemote on Android). See `phase-7-calendar-alarms.md` for exact steps. Do not skip.

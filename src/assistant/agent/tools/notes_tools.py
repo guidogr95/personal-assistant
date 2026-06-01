@@ -9,6 +9,7 @@ from assistant.notes.application.find_notes import find_notes
 from assistant.notes.application.list_notes import list_notes
 from assistant.notes.application.read_note import read_note
 from assistant.notes.application.save_note import save_note
+from assistant.notes.application.update_note import update_note as _update_note
 from assistant.notes.infrastructure.markdown_repository import MarkdownNoteRepository
 
 logger = structlog.get_logger()
@@ -67,6 +68,28 @@ def register_notes_tools(agent: Agent[None, str]) -> None:
         if note is None:
             return f"Note not found: {filename}"
         return note.content
+
+    @agent.tool
+    async def update_note(ctx: RunContext[None], filename: str, content: str) -> str:
+        """Edit an existing note in place without changing its filename.
+
+        Use this when the user wants to change the content of a note they
+        already created.  The filename stays the same; only the content is
+        overwritten.
+
+        Args:
+            filename: Exact note filename (e.g. ``2025-01-15-my-note.md``).
+            content: New Markdown content for the note.
+
+        Returns:
+            Confirmation message, or ``"Note not found: <filename>"`` if the
+            file does not exist.
+        """
+        note = await _update_note(filename, content, _repo)
+        if note is None:
+            return f"Note not found: {filename}"
+        logger.info("update_note_tool", filename=note.filename)
+        return f"Note updated: {note.filename}"
 
     @agent.tool
     async def list_notes_in_vault(ctx: RunContext[None]) -> str:

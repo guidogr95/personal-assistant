@@ -30,9 +30,11 @@ def configure_checkin_runner(
 
 
 async def run_checkin(checkin_id: str) -> None:
-    """APScheduler job: run the agent with the check-in's instructions and send the result.
+    """APScheduler job: fire a check-in and send output to Telegram.
 
-    Silently skips if the check-in is disabled or no longer exists.
+    Handles both agent-run check-ins (instructions) and direct-message
+    reminders (message).  Increments run_count and auto-disables if
+    max_runs is reached.  Silently skips disabled or missing check-ins.
     Catches all exceptions so a failing check-in never crashes the scheduler.
     """
     bot = _bot
@@ -53,17 +55,39 @@ async def run_checkin(checkin_id: str) -> None:
     chat_id = settings.telegram_allowed_user_id
 
     try:
-        # Lazy import breaks the circular dependency:
-        # run_checkin ← register_checkin ← checkin_tools ← agent → run_checkin
-        from assistant.agent.domain.agent import agent  # noqa: PLC0415
+        if checkin.message:
+            # Direct-message reminder (no LLM cost)
+            await bot.send_message(
+                chat_id=chat_id,
+                text=f"**Reminder: {checkin.name}**\n\n{checkin.message}",
+                parse_mode="Markdown",
+            )
+        elif checkin.instructions:
+            # Agent-run check-in
+            from assistant.agent.domain.agent import agent  # noqa: PLC0415
 
-        result = await agent.run(checkin.instructions)
-        await bot.send_message(
-            chat_id=chat_id,
-            text=f"**Check-in: {checkin.name}**\n\n{result.output}",
-            parse_mode="Markdown",
-        )
-        logger.info("checkin_sent", checkin_id=checkin_id, name=checkin.name)
+            result = await agent.run(checkin.instructions)
+            await bot.send_message(
+                chat_id=chat_id,
+                text=f"**Check-in: {checkin.name}**\n\n{result.output}",
+                parse_mode="Markdown",
+            )
+
+        # Increment run count and check for auto-disable
+        checkin.increment_run()
+        await checkin_repo.update(checkin)
+
+        if checkin.has_reached_max_runs():
+            checkin.disable()
+            await checkin_repo.update(checkin)
+            await bot.send_message(
+                chat_id=chat_id,
+                text=f"✅ Check-in '{checkin.name}' completed after {checkin.max_runs} run(s).",
+            )
+            logger.info("checkin_auto_disabled", checkin_id=checkin_id, name=checkin.name)
+        else:
+            logger.info("checkin_sent", checkin_id=checkin_id, name=checkin.name)
+
     except Exception as exc:
         logger.error("checkin_failed", checkin_id=checkin_id, name=checkin.name, error=str(exc))
         try:

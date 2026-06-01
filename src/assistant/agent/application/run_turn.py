@@ -4,11 +4,17 @@ import structlog
 from pydantic_ai.exceptions import ModelHTTPError
 from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter, ToolReturnPart
 
-from assistant.agent.domain.agent import agent
+from assistant.agent.domain.agent import _SYSTEM_PROMPT, agent
 from assistant.agent.tools.notes_tools import DELETE_CONFIRM_SENTINEL
 from assistant.conversation.domain.repositories import SessionRepository, TurnRepository
 from assistant.conversation.domain.turn import Turn, TurnRole
-from assistant.shared.exceptions import LLMUnavailableError, NoActiveSessionError
+from assistant.prompts.application.get_system_prompt import get_system_prompt
+from assistant.prompts.domain.prompt_repository import PromptRepository
+from assistant.shared.exceptions import (
+    InfrastructureError,
+    LLMUnavailableError,
+    NoActiveSessionError,
+)
 
 logger = structlog.get_logger()
 
@@ -56,6 +62,7 @@ async def run_turn(
     user_message: str,
     session_repo: SessionRepository,
     turn_repo: TurnRepository,
+    prompt_repo: PromptRepository,
 ) -> str:
     """Execute one conversational turn: run the agent and persist the exchange.
 
@@ -76,6 +83,15 @@ async def run_turn(
         else []
     )
 
+    # Load the active system prompt from DB.  If the DB is unreachable,
+    # fall back to the hardcoded default so the turn never fails because
+    # of a prompt table error.
+    try:
+        instructions = await get_system_prompt(prompt_repo)
+    except InfrastructureError:
+        logger.warning("prompt_db_unavailable_using_fallback", session_id=session.id)
+        instructions = _SYSTEM_PROMPT
+
     logger.info(
         "run_turn_start",
         session_id=session.id,
@@ -83,7 +99,9 @@ async def run_turn(
     )
 
     try:
-        result = await agent.run(user_message, message_history=message_history)
+        result = await agent.run(
+            user_message, message_history=message_history, instructions=instructions
+        )
     except ModelHTTPError as exc:
         logger.error(
             "llm_http_error",

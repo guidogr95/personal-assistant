@@ -8,6 +8,7 @@ from assistant.agent.application.run_turn import run_turn
 from assistant.agent.tools.notes_tools import DELETE_CONFIRM_SENTINEL
 from assistant.conversation.application.open_session import open_session_for_user
 from assistant.conversation.domain.repositories import SessionRepository, TurnRepository
+from assistant.prompts.domain.prompt_repository import PromptRepository
 from assistant.shared.exceptions import NoActiveSessionError
 from assistant.telegram.keyboards import build_delete_confirmation_keyboard
 from assistant.telegram.pending_state import pending_deletions
@@ -22,6 +23,7 @@ async def on_message(
     message: Message,
     session_repo: SessionRepository,
     turn_repo: TurnRepository,
+    prompt_repo: PromptRepository,
 ) -> None:
     """Route a plain user message through the agent and reply."""
     if not message.text or not message.from_user:
@@ -35,6 +37,7 @@ async def on_message(
             user_message=message.text,
             session_repo=session_repo,
             turn_repo=turn_repo,
+            prompt_repo=prompt_repo,
         )
     except NoActiveSessionError:
         # First message ever or after all sessions were closed: auto-create a session.
@@ -44,6 +47,7 @@ async def on_message(
             user_message=message.text,
             session_repo=session_repo,
             turn_repo=turn_repo,
+            prompt_repo=prompt_repo,
         )
 
     # Try Markdown first; fall back to plain text if the reply contains

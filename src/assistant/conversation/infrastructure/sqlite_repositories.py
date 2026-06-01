@@ -37,16 +37,43 @@ CREATE TABLE IF NOT EXISTS scheduled_checkins (
     created_at   TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS system_prompts (
+    id           INTEGER PRIMARY KEY CHECK (id = 1),
+    prompt_text  TEXT NOT NULL,
+    updated_at   TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_turns_session ON turns(session_id, ts);
 CREATE INDEX IF NOT EXISTS idx_sessions_user  ON sessions(user_id, last_active DESC);
 """
+
+
+_DEFAULT_SYSTEM_PROMPT = (
+    "You are a personal AI assistant accessed via Telegram.\n"
+    "You help with tasks, research, notes, calendar, and general questions.\n"
+    "Use Markdown formatting for lists and code blocks.\n\n"
+    "=== TIME AWARENESS ===\n"
+    "When the user asks for any time-based action — scheduling a check-in, "
+    "setting a reminder, setting a task due date, or any request involving a "
+    "specific time — you MUST call get_current_time first to know the current "
+    "time and timezone. Do not guess the time. Do not assume UTC unless the "
+    "user explicitly says so.\n\n"
+    "=== RESPONSE REVIEW (run before every response) ===\n"
+    "1. ASSUMPTIONS — What am I assuming? Did I validate it?\n"
+    "2. TOOL USAGE — Did I use the required tools for this request?\n"
+    "3. CONCISENESS — Can I remove 30% of the words without losing meaning? "
+    "Remove filler and sympathy phrases.\n"
+    "4. ACCURACY — Is every fact grounded in tool output or user input?\n"
+    "5. ACTIONABILITY — Did I provide a clear next step or concrete answer?"
+)
 
 
 async def init_db(sqlite_path: str) -> None:
     """Create all tables and indexes if they do not exist.
 
     Also applies any pending column-rename migrations so existing databases
-    are kept in sync with schema changes.
+    are kept in sync with schema changes, and seeds the default system prompt
+    if the table is empty.
 
     Must be called once at startup before any repository is used.
     """
@@ -54,9 +81,22 @@ async def init_db(sqlite_path: str) -> None:
         async with aiosqlite.connect(sqlite_path) as db:
             await db.executescript(_SCHEMA_SQL)
             await _migrate_checkin_instructions_column(db)
+            await _migrate_checkin_new_columns(db)
+            await _seed_system_prompt(db)
             await db.commit()
     except Exception as exc:
         raise InfrastructureError("Failed to initialise SQLite schema") from exc
+
+
+async def _seed_system_prompt(db: aiosqlite.Connection) -> None:
+    """Insert the default system prompt if the table is empty."""
+    async with db.execute("SELECT COUNT(*) FROM system_prompts") as cursor:
+        row = await cursor.fetchone()
+        if row and row[0] == 0:
+            await db.execute(
+                "INSERT INTO system_prompts (id, prompt_text, updated_at) VALUES (?, ?, ?)",
+                (1, _DEFAULT_SYSTEM_PROMPT, datetime.now(UTC).isoformat()),
+            )
 
 
 async def _migrate_checkin_instructions_column(db: aiosqlite.Connection) -> None:
@@ -72,6 +112,27 @@ async def _migrate_checkin_instructions_column(db: aiosqlite.Connection) -> None
         await db.execute(
             "ALTER TABLE scheduled_checkins RENAME COLUMN system_prompt TO instructions"
         )
+
+
+async def _migrate_checkin_new_columns(db: aiosqlite.Connection) -> None:
+    """Add message, max_runs, run_count, fire_at columns if missing.
+
+    Applies once on databases created before Phase 6.5.  Safe to run on
+    databases that already have the columns — SQLite ignores duplicate
+    ALTER TABLE ADD COLUMN statements.
+    """
+    async with db.execute("PRAGMA table_info(scheduled_checkins)") as cursor:
+        columns = [row[1] async for row in cursor]
+
+    new_columns = [
+        ("message", "TEXT"),
+        ("max_runs", "INTEGER"),
+        ("run_count", "INTEGER NOT NULL DEFAULT 0"),
+        ("fire_at", "TEXT"),
+    ]
+    for col_name, col_type in new_columns:
+        if col_name not in columns:
+            await db.execute(f"ALTER TABLE scheduled_checkins ADD COLUMN {col_name} {col_type}")
 
 
 def _parse_datetime(value: str) -> datetime:

@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -41,6 +42,9 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     google_client_secret: str = ""
     google_token_json_path: str = "/data/google_token.json"  # noqa: S105 — file path, not a secret
+
+    # Timezone
+    timezone: str = Field(default="America/Guayaquil", alias="TZ")
 
     # Misc
     log_level: str = "INFO"

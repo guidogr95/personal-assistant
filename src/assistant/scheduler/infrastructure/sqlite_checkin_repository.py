@@ -13,11 +13,31 @@ def _row_to_checkin(row: aiosqlite.Row) -> ScheduledCheckIn:
     created_at = datetime.fromisoformat(row["created_at"])
     if created_at.tzinfo is None:
         created_at = created_at.replace(tzinfo=UTC)
+
+    def _get(col: str) -> str | None:
+        try:
+            val = row[col]
+            return val if val is not None else None
+        except (KeyError, IndexError):
+            return None
+
+    fire_at_raw = _get("fire_at")
+    fire_at = datetime.fromisoformat(fire_at_raw) if fire_at_raw else None
+    if fire_at and fire_at.tzinfo is None:
+        fire_at = fire_at.replace(tzinfo=UTC)
+
+    max_runs_raw = _get("max_runs")
+    run_count_raw = _get("run_count")
+
     return ScheduledCheckIn(
         id=row["id"],
         name=row["name"],
-        cron_expr=row["cron_expr"],
-        instructions=row["instructions"],
+        cron_expr=_get("cron_expr") or "",
+        instructions=_get("instructions") or "",
+        message=_get("message") or "",
+        fire_at=fire_at,
+        max_runs=int(max_runs_raw) if max_runs_raw is not None else None,
+        run_count=int(run_count_raw) if run_count_raw is not None else 0,
         enabled=bool(row["enabled"]),
         created_at=created_at,
     )
@@ -36,12 +56,17 @@ class SQLiteScheduledCheckInRepository(ScheduledCheckInRepository):
                 await db.execute(
                     """
                     INSERT INTO scheduled_checkins
-                        (id, name, cron_expr, instructions, enabled, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                        (id, name, cron_expr, instructions, message,
+                         fire_at, max_runs, run_count, enabled, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         name         = excluded.name,
                         cron_expr    = excluded.cron_expr,
                         instructions = excluded.instructions,
+                        message      = excluded.message,
+                        fire_at      = excluded.fire_at,
+                        max_runs     = excluded.max_runs,
+                        run_count    = excluded.run_count,
                         enabled      = excluded.enabled
                     """,
                     (
@@ -49,6 +74,10 @@ class SQLiteScheduledCheckInRepository(ScheduledCheckInRepository):
                         checkin.name,
                         checkin.cron_expr,
                         checkin.instructions,
+                        checkin.message,
+                        checkin.fire_at.isoformat() if checkin.fire_at else None,
+                        checkin.max_runs,
+                        checkin.run_count,
                         int(checkin.enabled),
                         checkin.created_at.isoformat(),
                     ),
@@ -92,6 +121,39 @@ class SQLiteScheduledCheckInRepository(ScheduledCheckInRepository):
                     return [_row_to_checkin(r) for r in rows]
         except Exception as exc:
             raise InfrastructureError("Failed to list check-ins") from exc
+
+    async def update(self, checkin: ScheduledCheckIn) -> None:
+        """Update an existing check-in record."""
+        try:
+            async with aiosqlite.connect(self._path) as db:
+                await db.execute(
+                    """
+                    UPDATE scheduled_checkins SET
+                        name         = ?,
+                        cron_expr    = ?,
+                        instructions = ?,
+                        message      = ?,
+                        fire_at      = ?,
+                        max_runs     = ?,
+                        run_count    = ?,
+                        enabled      = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        checkin.name,
+                        checkin.cron_expr,
+                        checkin.instructions,
+                        checkin.message,
+                        checkin.fire_at.isoformat() if checkin.fire_at else None,
+                        checkin.max_runs,
+                        checkin.run_count,
+                        int(checkin.enabled),
+                        checkin.id,
+                    ),
+                )
+                await db.commit()
+        except Exception as exc:
+            raise InfrastructureError(f"Failed to update check-in {checkin.id}") from exc
 
     async def delete(self, checkin_id: str) -> None:
         try:

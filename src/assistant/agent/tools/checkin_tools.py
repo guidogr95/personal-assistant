@@ -8,6 +8,7 @@ from pydantic_ai import Agent, RunContext
 
 from assistant.scheduler.application import delete_checkin, list_checkins, register_checkin
 from assistant.scheduler.domain.repositories import ScheduledCheckInRepository
+from assistant.scheduler.domain.scheduled_checkin import ScheduledCheckIn
 from assistant.shared.exceptions import CheckInNotFoundError
 
 logger = structlog.get_logger()
@@ -96,10 +97,16 @@ def register_checkin_tools(agent: Agent[None, str]) -> None:
         if not checkins:
             return "No check-ins are currently scheduled."
 
-        lines = [
-            f"- **{c.name}** `{c.cron_expr}` UTC ({'enabled' if c.enabled else 'disabled'})"
-            for c in checkins
-        ]
+        def _format_checkin(c: ScheduledCheckIn) -> str:
+            if c.cron_expr:
+                schedule = f"`{c.cron_expr}` UTC"
+            elif c.fire_at:
+                schedule = f"one-off at `{c.fire_at.strftime('%Y-%m-%d %H:%M')}` UTC"
+            else:
+                schedule = "unknown schedule"
+            return f"- **{c.name}** {schedule} ({'enabled' if c.enabled else 'disabled'})"
+
+        lines = [_format_checkin(c) for c in checkins]
         return "\n".join(lines)
 
     @agent.tool

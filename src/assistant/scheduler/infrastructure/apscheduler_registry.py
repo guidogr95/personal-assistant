@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from datetime import datetime
 
 import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.date import DateTrigger
 
 logger = structlog.get_logger()
 
@@ -49,6 +51,27 @@ def register_checkin_job(
         replace_existing=True,
     )
     logger.info("checkin_job_registered", checkin_id=checkin_id, cron_expr=cron_expr)
+
+
+def register_one_off_job(
+    scheduler: AsyncIOScheduler,
+    checkin_id: str,
+    fire_at: datetime,
+    job_func: Callable[[str], Awaitable[None]],
+) -> None:
+    """Add or replace a one-off check-in job using a DateTrigger.
+
+    Uses replace_existing=True so re-registration at startup is idempotent.
+    """
+    trigger = DateTrigger(run_date=fire_at)
+    scheduler.add_job(
+        job_func,
+        trigger=trigger,
+        args=[checkin_id],
+        id=checkin_id,
+        replace_existing=True,
+    )
+    logger.info("checkin_one_off_registered", checkin_id=checkin_id, fire_at=fire_at.isoformat())
 
 
 def remove_checkin_job(scheduler: AsyncIOScheduler, checkin_id: str) -> None:

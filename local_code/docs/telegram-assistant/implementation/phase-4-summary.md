@@ -104,8 +104,7 @@ pointing to `${HOME}/notes` on the WSL host. This makes notes visible from Windo
 
 - **Obsidian vault setup** — Manual step: open Obsidian on Windows, add vault pointing to
   `\\wsl$\Ubuntu\home\guidogr95\notes`. No code change needed.
-- **Phone sync** — When the bot is deployed to a remote VPS, the Syncthing container will sync
-  the named `notes_data` volume to Android. Not needed for local development.
+- **Phone sync** — ✅ Resolved (Phase 6 post-phase). Syncthing on the VPS syncs `notes_data` to Windows. Android setup pending (Phase 7 gate). See phase 6 summary for Syncthing `.stignore` IaC details.
 - **Security note** — Notes are plain-text `.md` files. The agent can read and return their full
   content in Telegram messages. Passwords and secrets must not be stored in notes. Use a
   dedicated encrypted vault (e.g. Vaultwarden) for sensitive credentials.

@@ -114,6 +114,36 @@ class MarkdownNoteRepository:
             reverse=True,
         )
 
+    async def update(self, filename: str, content: str) -> Note | None:
+        """Overwrite ``filename`` with ``content`` and return the updated Note.
+
+        Returns:
+            The updated Note, or ``None`` if the file does not exist.
+
+        Raises:
+            InfrastructureError: if the file exists but cannot be written.
+        """
+        path = self._vault / filename
+        if not path.exists():
+            return None
+        try:
+            async with aiofiles.open(path, "w", encoding="utf-8") as f:
+                await f.write(content)
+        except OSError as e:
+            logger.error("note_update_failed", filename=filename, error=str(e))
+            raise InfrastructureError(f"Failed to update note {filename}") from e
+        stat = await aiofiles.os.stat(path)
+        ts = datetime.fromtimestamp(stat.st_mtime, tz=UTC)
+        title = self._extract_title(filename, content)
+        logger.info("note_updated", filename=filename)
+        return Note(
+            filename=filename,
+            title=title,
+            content=content,
+            created_at=ts,
+            modified_at=ts,
+        )
+
     async def delete(self, filename: str) -> bool:
         """Remove the note file from the vault.
 
