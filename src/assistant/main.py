@@ -63,6 +63,7 @@ async def main() -> None:
             BotCommand(command="sessions", description="Browse recent sessions"),
             BotCommand(command="checkin", description="Manage proactive check-ins"),
             BotCommand(command="time", description="Show current server time"),
+            BotCommand(command="tools", description="List all tools the agent has access to"),
             BotCommand(command="system", description="Show or update system prompt"),
         ]
     )
