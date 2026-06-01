@@ -67,6 +67,8 @@ services:
   vikunja:
     image: vikunja/vikunja:latest
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:3456:3456"
     environment:
       VIKUNJA_DATABASE_TYPE: mysql
       VIKUNJA_DATABASE_HOST: vikunja_db
@@ -111,7 +113,7 @@ services:
       - notes_data:/var/syncthing
     ports:
       - "22000:22000"
-      - "8384:8384"
+      - "127.0.0.1:8384:8384"
     networks:
       - assistant_net
 
