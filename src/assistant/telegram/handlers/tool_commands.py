@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import json
 
 import httpx
 import structlog
@@ -23,6 +24,10 @@ router = Router()
 async def _fetch_mcp_tool_names() -> list[str] | None:
     """Query the MCP memory service for its registered tool names.
 
+    The MCP streamable-http transport returns SSE-wrapped JSON-RPC responses,
+    i.e. one or more lines of the form ``data: <json>\\n\\n``.  We must strip
+    the SSE envelope before parsing.
+
     Returns:
         Sorted list of tool names on success; ``None`` if the service is
         unreachable or returns an unexpected response.
@@ -38,7 +43,20 @@ async def _fetch_mcp_tool_names() -> list[str] | None:
                 },
             )
             response.raise_for_status()
-            data: dict[str, object] = response.json()
+            raw = response.text.strip()
+
+            # SSE envelope: lines are prefixed with "data: "; find the JSON-RPC response line.
+            json_text: str | None = None
+            for line in raw.splitlines():
+                stripped = line.strip()
+                if stripped.startswith("data:"):
+                    json_text = stripped[len("data:") :].strip()
+                    break
+            if json_text is None:
+                # Plain JSON response (no SSE envelope).
+                json_text = raw
+
+            data: dict[str, object] = json.loads(json_text)
             result = data.get("result", {})
             if not isinstance(result, dict):
                 result_type = type(result).__name__
