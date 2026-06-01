@@ -27,3 +27,6 @@ google_token.json
 # Data volumes (local dev)
 data/
 notes/
+# Source package — never ignore (the notes/ above only matches root-level dir,
+# but git applies gitignore patterns at any depth; force-include the package)
+!/src/**/notes/
