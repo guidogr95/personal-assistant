@@ -58,10 +58,6 @@ class ScheduledCheckIn:
                     f"expected {_CRON_FIELD_COUNT} fields, got {len(parts)}"
                 )
 
-        if has_fire_at and self.fire_at is not None:
-            if self.fire_at <= datetime.now(UTC):
-                raise ValueError("fire_at must be in the future")
-
         if self.max_runs is not None and self.max_runs < 1:
             raise ValueError("max_runs must be >= 1")
 

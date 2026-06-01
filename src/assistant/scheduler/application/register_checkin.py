@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -44,6 +44,9 @@ async def register_checkin(
     """
     if repo is None or scheduler is None:
         raise RuntimeError("repo and scheduler are required")
+
+    if fire_at is not None and fire_at <= datetime.now(UTC):
+        raise ValueError("fire_at must be in the future")
 
     checkin = ScheduledCheckIn(
         name=name,

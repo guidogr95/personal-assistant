@@ -72,10 +72,13 @@ def test_should_raise_on_neither_cron_nor_fire_at() -> None:
         ScheduledCheckIn(name="Bad", instructions="Task.")
 
 
-def test_should_raise_on_past_fire_at() -> None:
+def test_should_accept_past_fire_at() -> None:
+    # Past fire_at is valid on the entity — it represents a fired or missed job.
+    # The "must be in the future" constraint is enforced by the application layer
+    # (register_checkin) on user input, not here.
     past = datetime.now(UTC) - timedelta(hours=1)
-    with pytest.raises(ValueError, match="fire_at must be in the future"):
-        ScheduledCheckIn(name="Bad", fire_at=past, message="Task.")
+    checkin = ScheduledCheckIn(name="Expired", fire_at=past, message="Task.")
+    assert checkin.fire_at == past
 
 
 def test_should_raise_on_invalid_max_runs() -> None:
