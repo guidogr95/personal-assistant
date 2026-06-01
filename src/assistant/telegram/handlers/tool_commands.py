@@ -107,7 +107,7 @@ async def cmd_tools(message: Message) -> None:
     accurate regardless of what the service exposes.
     """
     try:
-        python_tool_names: set[str] = set(agent._function_tools.keys())  # type: ignore[attr-defined]
+        python_tool_names: set[str] = set(agent._function_toolset.tools.keys())
     except AttributeError:
         logger.warning("agent_function_tools_unavailable")
         python_tool_names = set()
