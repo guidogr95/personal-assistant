@@ -44,9 +44,7 @@ async def on_delete_confirm(callback: CallbackQuery) -> None:
     if deleted:
         await callback.answer("Deleted.")
         if isinstance(callback.message, Message):
-            await callback.message.edit_text(
-                f"🗑 *{filename}* has been deleted.", parse_mode="Markdown"
-            )
+            await callback.message.edit_text(f"🗑 *{filename}* has been deleted.")
     else:
         await callback.answer("Note not found — it may have already been deleted.", show_alert=True)
 

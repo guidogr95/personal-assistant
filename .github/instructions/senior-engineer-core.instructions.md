@@ -158,3 +158,5 @@ Before writing or reviewing any code, ask:
 | Function >20 lines or doing 2 things | Decompose Function | Each piece is testable |
 | Deeply nested `if` blocks | Introduce Guard Clause | Happy path stays at left margin |
 | Function returns AND causes side effect | Separate Query from Command | Predictable, easier to test |
+
+**Explicit prior requests.** If the user previously made an explicit decision or request about how something should work (e.g. "use MarkdownV2", "keep the old behavior", "do not change X"), you MUST NOT override or revert that decision on your own authority. Stop, explain the conflict, and ask the user for direction before proceeding.

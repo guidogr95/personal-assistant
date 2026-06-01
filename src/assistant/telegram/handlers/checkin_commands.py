@@ -9,6 +9,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from assistant.scheduler.application import delete_checkin, list_checkins, register_checkin
 from assistant.scheduler.domain.repositories import ScheduledCheckInRepository
 from assistant.shared.exceptions import CheckInNotFoundError
+from assistant.telegram.formatting import answer_markdown, bold, code
 
 logger = structlog.get_logger()
 
@@ -52,7 +53,7 @@ async def cmd_checkin(
         await _handle_add(message, raw, checkin_repo, scheduler)
         return
 
-    await message.answer(_USAGE, parse_mode="Markdown")
+    await answer_markdown(message, _USAGE)
 
 
 async def _handle_list(
@@ -63,8 +64,10 @@ async def _handle_list(
     if not checkins:
         await message.answer("No check-ins registered.")
         return
-    lines = [f"- **{c.name}** `{c.cron_expr}` ({'on' if c.enabled else 'off'})" for c in checkins]
-    await message.answer("\n".join(lines), parse_mode="Markdown")
+    lines = [
+        f"- {bold(c.name)} {code(c.cron_expr)} ({'on' if c.enabled else 'off'})" for c in checkins
+    ]
+    await answer_markdown(message, "\n".join(lines))
 
 
 async def _handle_delete(
@@ -74,8 +77,9 @@ async def _handle_delete(
     scheduler: AsyncIOScheduler,
 ) -> None:
     if not name:
-        await message.answer(
-            "Provide a check-in name: `/checkin delete <name>`", parse_mode="Markdown"
+        await answer_markdown(
+            message,
+            "Provide a check-in name: `/checkin delete <name>`",
         )
         return
     try:
@@ -94,9 +98,9 @@ async def _handle_add(
     try:
         name, cron_expr, instructions = [p.strip() for p in raw.split("|", 2)]
     except ValueError:
-        await message.answer(
+        await answer_markdown(
+            message,
             "Format: `/checkin add <name> | <cron 5-field> | <instructions>`",
-            parse_mode="Markdown",
         )
         return
 
@@ -108,9 +112,9 @@ async def _handle_add(
             repo=checkin_repo,
             scheduler=scheduler,
         )
-        await message.answer(
-            f"Check-in **{checkin.name}** registered with schedule `{checkin.cron_expr}`.",
-            parse_mode="Markdown",
+        await answer_markdown(
+            message,
+            f"Check-in {bold(checkin.name)} registered with schedule {code(checkin.cron_expr)}.",
         )
     except ValueError as exc:
         await message.answer(f"Invalid input: {exc}")

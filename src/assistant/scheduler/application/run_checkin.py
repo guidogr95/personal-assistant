@@ -5,6 +5,7 @@ from aiogram import Bot
 
 from assistant.scheduler.domain.repositories import ScheduledCheckInRepository
 from assistant.shared.config import settings
+from assistant.telegram.formatting import bold, send_markdown
 
 logger = structlog.get_logger()
 
@@ -57,21 +58,22 @@ async def run_checkin(checkin_id: str) -> None:
     try:
         if checkin.message:
             # Direct-message reminder (no LLM cost)
-            await bot.send_message(
-                chat_id=chat_id,
-                text=f"**Reminder: {checkin.name}**\n\n{checkin.message}",
-                parse_mode="Markdown",
-            )
+            text = f"🔔 {bold(checkin.name)}\n\n{checkin.message}"
         elif checkin.instructions:
             # Agent-run check-in
             from assistant.agent.domain.agent import agent  # noqa: PLC0415
 
             result = await agent.run(checkin.instructions)
-            await bot.send_message(
-                chat_id=chat_id,
-                text=f"**Check-in: {checkin.name}**\n\n{result.output}",
-                parse_mode="Markdown",
-            )
+            text = f"📋 {bold(checkin.name)}\n\n{result.output}"
+        else:
+            text = f"📋 {bold(checkin.name)}\n\n(no message or instructions)"
+
+        try:
+            await send_markdown(bot, chat_id, text)
+        except Exception:
+            # Fallback to plain text if MarkdownV2 parse fails
+            logger.warning("checkin_markdown_failed_falling_back", checkin_id=checkin_id)
+            await bot.send_message(chat_id=chat_id, text=text)
 
         # Increment run count and check for auto-disable
         checkin.increment_run()
@@ -80,10 +82,13 @@ async def run_checkin(checkin_id: str) -> None:
         if checkin.has_reached_max_runs():
             checkin.disable()
             await checkin_repo.update(checkin)
-            await bot.send_message(
-                chat_id=chat_id,
-                text=f"✅ Check-in '{checkin.name}' completed after {checkin.max_runs} run(s).",
+            done_text = (
+                f"✅ Check-in {bold(checkin.name)} completed after {checkin.max_runs} run(s)."
             )
+            try:
+                await send_markdown(bot, chat_id, done_text)
+            except Exception:
+                await bot.send_message(chat_id=chat_id, text=done_text)
             logger.info("checkin_auto_disabled", checkin_id=checkin_id, name=checkin.name)
         else:
             logger.info("checkin_sent", checkin_id=checkin_id, name=checkin.name)
@@ -91,9 +96,7 @@ async def run_checkin(checkin_id: str) -> None:
     except Exception as exc:
         logger.error("checkin_failed", checkin_id=checkin_id, name=checkin.name, error=str(exc))
         try:
-            await bot.send_message(
-                chat_id=chat_id,
-                text=f"⚠️ Check-in '{checkin.name}' failed. See logs for details.",
-            )
+            fail_text = f"⚠️ Check-in {bold(checkin.name)} failed. See logs for details."
+            await send_markdown(bot, chat_id, fail_text)
         except Exception as notify_exc:
             logger.error("checkin_notify_failed", checkin_id=checkin_id, error=str(notify_exc))

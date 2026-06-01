@@ -83,7 +83,7 @@ async def main() -> None:
     scheduler = create_scheduler()
     configure_checkin_runner(bot=bot, checkin_repo=checkin_repo)
     configure_checkin_tools(scheduler=scheduler, checkin_repo=checkin_repo)
-    configure_reminder_tools(checkin_repo=checkin_repo)
+    configure_reminder_tools(scheduler=scheduler, checkin_repo=checkin_repo)
     configure_prompt_tools(prompt_repo=prompt_repo)
 
     # Re-register all enabled check-ins from DB so jobs survive bot restarts.

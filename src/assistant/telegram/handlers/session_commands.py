@@ -9,6 +9,7 @@ from assistant.agent.domain.agent import agent
 from assistant.conversation.application import close_session, list_sessions, open_session
 from assistant.conversation.domain.repositories import SessionRepository, TurnRepository
 from assistant.shared.exceptions import NoActiveSessionError
+from assistant.telegram.formatting import answer_markdown, bold
 from assistant.telegram.keyboards import build_sessions_keyboard
 
 logger = structlog.get_logger()
@@ -37,7 +38,7 @@ Just say "set up a daily check-in at 9am to summarise my tasks" and I'll handle 
 @router.message(Command("help"))
 async def cmd_help(message: Message) -> None:
     """List all available commands."""
-    await message.answer(_HELP_TEXT, parse_mode="Markdown")
+    await answer_markdown(message, _HELP_TEXT)
 
 
 @router.message(Command("new"))
@@ -72,7 +73,7 @@ async def cmd_close(
             turn_repo=turn_repo,
             agent=agent,
         )
-        await message.answer(f"Session closed: *{title}*", parse_mode="Markdown")
+        await answer_markdown(message, f"Session closed: {bold(title)}")
     except NoActiveSessionError:
         await message.answer("No active session to close.")
 

@@ -18,6 +18,8 @@ These rules are active during any feature development conversation. They enforce
 
 **Existing patterns.** Study how similar features are implemented before proposing a new approach. Consistency with the codebase matters more than personal preference.
 
+**Explicit prior requests.** If the user previously made an explicit decision or request about how something should work (e.g. "use MarkdownV2", "keep the old behavior", "do not change X"), you MUST NOT override or revert that decision on your own authority. Stop, explain the conflict, and ask the user for direction before proceeding.
+
 ---
 
 ## 2. Plan Before Code

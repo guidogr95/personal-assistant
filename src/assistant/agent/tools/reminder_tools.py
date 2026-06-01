@@ -3,27 +3,29 @@
 from __future__ import annotations
 
 import structlog
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from pydantic_ai import Agent, RunContext
 
 from assistant.scheduler.application.parse_reminder_time import parse_reminder_time
 from assistant.scheduler.application.register_checkin import register_checkin
 from assistant.scheduler.domain.repositories import ScheduledCheckInRepository
-from assistant.scheduler.infrastructure.apscheduler_registry import create_scheduler
 
 logger = structlog.get_logger()
 
 # Injected at startup
 _checkin_repo: ScheduledCheckInRepository | None = None
-_scheduler = create_scheduler()
+_scheduler: AsyncIOScheduler | None = None
 
 
 def configure_reminder_tools(
     *,
+    scheduler: AsyncIOScheduler,
     checkin_repo: ScheduledCheckInRepository,
 ) -> None:
     """Inject runtime dependencies before the agent handles any messages."""
-    global _checkin_repo
+    global _checkin_repo, _scheduler
     _checkin_repo = checkin_repo
+    _scheduler = scheduler
 
 
 def register_reminder_tools(agent: Agent[None, str]) -> None:
@@ -54,7 +56,8 @@ def register_reminder_tools(agent: Agent[None, str]) -> None:
             message: The reminder text to send when the time arrives.
         """
         repo = _checkin_repo
-        if repo is None:
+        sched = _scheduler
+        if repo is None or sched is None:
             return "Reminder tools are not configured."
 
         try:
@@ -70,7 +73,7 @@ def register_reminder_tools(agent: Agent[None, str]) -> None:
                 fire_at=fire_at,
                 max_runs=1 if fire_at else None,
                 repo=repo,
-                scheduler=_scheduler,
+                scheduler=sched,
             )
         except (ValueError, RuntimeError) as exc:
             logger.warning("set_reminder_failed", time_expr=time_expr, error=str(exc))

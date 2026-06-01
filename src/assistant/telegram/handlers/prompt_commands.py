@@ -10,6 +10,7 @@ from aiogram.types import Message
 from assistant.prompts.application.get_system_prompt import get_system_prompt
 from assistant.prompts.application.update_system_prompt import update_system_prompt
 from assistant.prompts.domain.prompt_repository import PromptRepository
+from assistant.telegram.formatting import answer_markdown, bold, pre
 
 logger = structlog.get_logger()
 
@@ -43,11 +44,11 @@ async def cmd_system(
         await _handle_set(message, new_prompt, prompt_repo)
         return
 
-    await message.answer(
+    await answer_markdown(
+        message,
         "Usage:\n"
         "`/system show` — display current system prompt\n"
         "`/system set <prompt>` — update system prompt",
-        parse_mode="Markdown",
     )
 
 
@@ -55,7 +56,7 @@ async def _handle_show(message: Message, prompt_repo: PromptRepository) -> None:
     prompt = await get_system_prompt(prompt_repo)
     if len(prompt) > _MAX_TELEGRAM_MESSAGE_LENGTH:
         prompt = prompt[:_MAX_TELEGRAM_MESSAGE_LENGTH] + "\n\n... (truncated)"
-    await message.answer(f"*Current system prompt:*\n\n```\n{prompt}\n```", parse_mode="Markdown")
+    await answer_markdown(message, f"{bold('Current system prompt:')}\n\n{pre(prompt)}")
 
 
 async def _handle_set(
@@ -64,7 +65,7 @@ async def _handle_set(
     prompt_repo: PromptRepository,
 ) -> None:
     if not new_prompt:
-        await message.answer("Provide a prompt: `/system set <prompt>`", parse_mode="Markdown")
+        await answer_markdown(message, "Provide a prompt: `/system set <prompt>`")
         return
     await update_system_prompt(new_prompt, prompt_repo)
     user_id = message.from_user.id if message.from_user else None
