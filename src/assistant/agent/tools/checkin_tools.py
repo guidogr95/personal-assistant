@@ -43,26 +43,33 @@ def register_checkin_tools(agent: Agent[None, str]) -> None:
     async def schedule_checkin(
         ctx: RunContext[None],
         name: str,
-        cron_expr: str,
-        instructions: str,
+        instructions: str = "",
+        message: str = "",
+        cron_expr: str = "",
+        fire_at: str = "",
+        max_runs: int | None = None,
     ) -> str:
-        """Schedule a recurring proactive check-in.
+        """Schedule a proactive check-in or one-off reminder.
 
-        The bot will run the check-in on the given cron schedule and send the
-        result to Telegram automatically, without any user prompt.
+        The bot will send output to Telegram automatically on the given schedule.
 
         Args:
             name: Short label for the check-in (e.g. "Morning Tasks").
-            cron_expr: Standard 5-field cron expression (minute hour day month weekday).
-                Translate natural language schedules to cron before calling:
+            instructions: What the assistant should do when the check-in fires.
+                Use this for agent-run check-ins. Example:
+                "Summarise my open Vikunja tasks and flag any overdue ones."
+            message: Direct message text to send (no LLM cost). Use this for
+                simple reminders. Example: "Call mom" or "Drink water".
+            cron_expr: Standard 5-field cron expression for recurring jobs.
                 - "every day at 9am"      → "0 9 * * *"
                 - "every weekday at 8am"  → "0 8 * * 1-5"
                 - "every Monday at 10am"  → "0 10 * * 1"
                 - "every hour"            → "0 * * * *"
                 All times are UTC.
-            instructions: What the assistant should do when the check-in fires.
-                Write this as a direct instruction, e.g.
-                "Summarise my open Vikunja tasks and flag any overdue ones."
+            fire_at: ISO-8601 datetime for a one-off job. Use this OR cron_expr,
+                not both. Example: "2026-06-01T14:30:00".
+            max_runs: Maximum number of times this check-in fires before
+                auto-disabling. None = infinite. Set to 1 for one-off reminders.
         """
         scheduler = _scheduler
         checkin_repo = _checkin_repo
@@ -71,11 +78,24 @@ def register_checkin_tools(agent: Agent[None, str]) -> None:
                 "Check-in tools are not configured. This is a startup bug — contact the developer."
             )
 
+        # Parse fire_at string to datetime if provided
+        from datetime import datetime as _dt
+
+        fire_at_dt: _dt | None = None
+        if fire_at.strip():
+            try:
+                fire_at_dt = _dt.fromisoformat(fire_at.strip())
+            except ValueError:
+                return f"Invalid fire_at datetime: '{fire_at}'. Use ISO-8601 format."
+
         try:
             checkin = await register_checkin.register_checkin(
                 name=name,
-                cron_expr=cron_expr,
                 instructions=instructions,
+                message=message,
+                cron_expr=cron_expr,
+                fire_at=fire_at_dt,
+                max_runs=max_runs,
                 repo=checkin_repo,
                 scheduler=scheduler,
             )
@@ -83,7 +103,11 @@ def register_checkin_tools(agent: Agent[None, str]) -> None:
             logger.warning("schedule_checkin_tool_invalid", name=name, error=str(exc))
             return f"Couldn't schedule check-in: {exc}"
 
-        logger.info("schedule_checkin_tool", checkin_id=checkin.id, name=name)
+        if checkin.fire_at:
+            return (
+                f"Check-in '{checkin.name}' scheduled for "
+                f"{checkin.fire_at.strftime('%Y-%m-%d %H:%M')} UTC."
+            )
         return f"Check-in '{checkin.name}' scheduled (`{checkin.cron_expr}` UTC)."
 
     @agent.tool

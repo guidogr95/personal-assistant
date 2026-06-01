@@ -62,7 +62,12 @@ async def test_should_schedule_checkin_via_tool() -> None:
     register_checkin_tools(mock_agent)  # type: ignore[arg-type]
 
     tool_fn = registered_tools["schedule_checkin"]
-    result = await tool_fn(None, "Morning Tasks", "0 9 * * *", "Summarise tasks.")  # type: ignore[operator]
+    result = await tool_fn(
+        None,
+        "Morning Tasks",
+        instructions="Summarise tasks.",
+        cron_expr="0 9 * * *",
+    )  # type: ignore[operator]
 
     repo.save.assert_awaited_once()
     scheduler.add_job.assert_called_once()
@@ -92,7 +97,12 @@ async def test_should_return_error_message_when_cron_invalid() -> None:
     register_checkin_tools(mock_agent)  # type: ignore[arg-type]
 
     tool_fn = registered_tools["schedule_checkin"]
-    result = await tool_fn(None, "Bad", "0 9 * *", "Do something.")  # type: ignore[operator]
+    result = await tool_fn(
+        None,
+        "Bad",
+        instructions="Do something.",
+        cron_expr="0 9 * *",
+    )  # type: ignore[operator]
 
     repo.save.assert_not_awaited()
     assert "Couldn't schedule" in result
