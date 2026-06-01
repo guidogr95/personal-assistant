@@ -47,8 +47,8 @@ async def cmd_system(
     await answer_markdown(
         message,
         "Usage:\n"
-        "`/system show` — display current system prompt\n"
-        "`/system set <prompt>` — update system prompt",
+        "<code>/system show</code> — display current system prompt\n"
+        "<code>/system set &lt;prompt&gt;</code> — update system prompt",
     )
 
 
@@ -65,7 +65,7 @@ async def _handle_set(
     prompt_repo: PromptRepository,
 ) -> None:
     if not new_prompt:
-        await answer_markdown(message, "Provide a prompt: `/system set <prompt>`")
+        await answer_markdown(message, "Provide a prompt: <code>/system set &lt;prompt&gt;</code>")
         return
     await update_system_prompt(new_prompt, prompt_repo)
     user_id = message.from_user.id if message.from_user else None

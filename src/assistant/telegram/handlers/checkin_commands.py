@@ -17,10 +17,10 @@ router = Router()
 
 _USAGE = (
     "Usage:\n"
-    "`/checkin add <name> | <cron 5-field> | <instructions>`\n"
-    "`/checkin list`\n"
-    "`/checkin delete <name>`\n\n"
-    "Cron example: `0 9 * * *` = every day at 09:00 UTC"
+    "<code>/checkin add &lt;name&gt; | &lt;cron 5-field&gt; | &lt;instructions&gt;</code>\n"
+    "<code>/checkin list</code>\n"
+    "<code>/checkin delete &lt;name&gt;</code>\n\n"
+    "Cron example: <code>0 9 * * *</code> = every day at 09:00 UTC"
 )
 
 
@@ -79,7 +79,7 @@ async def _handle_delete(
     if not name:
         await answer_markdown(
             message,
-            "Provide a check-in name: `/checkin delete <name>`",
+            "Provide a check-in name: <code>/checkin delete &lt;name&gt;</code>",
         )
         return
     try:
@@ -100,7 +100,7 @@ async def _handle_add(
     except ValueError:
         await answer_markdown(
             message,
-            "Format: `/checkin add <name> | <cron 5-field> | <instructions>`",
+            "Format: <code>/checkin add &lt;name&gt; | &lt;cron 5-field&gt; | &lt;instructions&gt;</code>",
         )
         return
 

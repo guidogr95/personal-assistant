@@ -16,23 +16,23 @@ logger = structlog.get_logger()
 
 router = Router()
 
-_HELP_TEXT = """*Available commands*
+_HELP_TEXT = """<b>Available commands</b>
 
-*Session management*
-`/new` — start a fresh session (closes the active one)
-`/close` — close the active session and generate a title
-`/sessions` — show your 10 most recent sessions as a tappable list
+<b>Session management</b>
+<code>/new</code> — start a fresh session (closes the active one)
+<code>/close</code> — close the active session and generate a title
+<code>/sessions</code> — show your 10 most recent sessions as a tappable list
 
-*Check-ins* _(proactive scheduled messages)_
-`/checkin list` — list all scheduled check-ins
-`/checkin add <name> | <cron> | <instructions>` — schedule a check-in
-`/checkin delete <name>` — remove a check-in
-Cron example: `0 9 * * *` = every day at 09:00 UTC
+<b>Check-ins</b> <i>(proactive scheduled messages)</i>
+<code>/checkin list</code> — list all scheduled check-ins
+<code>/checkin add &lt;name&gt; | &lt;cron&gt; | &lt;instructions&gt;</code> — schedule a check-in
+<code>/checkin delete &lt;name&gt;</code> — remove a check-in
+Cron example: <code>0 9 * * *</code> = every day at 09:00 UTC
 
-`/help` — show this message
+<code>/help</code> — show this message
 
-_Tip: you don't need slash commands for check-ins. \
-Just say "set up a daily check-in at 9am to summarise my tasks" and I'll handle it._"""
+<i>Tip: you don't need slash commands for check-ins. Just say
+"set up a daily check-in at 9am to summarise my tasks" and I'll handle it.</i>"""
 
 
 @router.message(Command("help"))

@@ -2,4 +2,4 @@
 
 from __future__ import annotations
 
-DEFAULT_PARSE_MODE: str = "MarkdownV2"
+DEFAULT_PARSE_MODE: str = "HTML"

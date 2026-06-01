@@ -1,44 +1,46 @@
 """Telegram message formatting helpers.
 
 Provides thin wrappers around aiogram send methods with the project's
-default ``parse_mode="MarkdownV2"``.  Callers that build formatted text
+default ``parse_mode="HTML"``.  Callers that build formatted text
 programmatically should use the ``bold``, ``italic``, ``code``, etc.
-helpers so variable content is safely escaped.  AI-generated replies are
-passed through as-is (the model writes valid MarkdownV2).
+helpers so variable content is safely escaped via ``html.escape()``.
+AI-generated replies are passed through as-is — the LLM is instructed
+to produce Telegram HTML tags directly.
 """
 
 from __future__ import annotations
 
+import html
+
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, Message
-from aiogram.utils.markdown import markdown_decoration  # type: ignore[attr-defined]
 
 from assistant.telegram.constants import DEFAULT_PARSE_MODE
 
 
 def bold(text: str) -> str:
-    """Wrap text in MarkdownV2 bold markers."""
-    return markdown_decoration.bold(text)
+    """Wrap escaped text in an HTML bold tag."""
+    return f"<b>{html.escape(text)}</b>"
 
 
 def italic(text: str) -> str:
-    """Wrap text in MarkdownV2 italic markers."""
-    return markdown_decoration.italic(text)
+    """Wrap escaped text in an HTML italic tag."""
+    return f"<i>{html.escape(text)}</i>"
 
 
 def code(text: str) -> str:
-    """Wrap text in MarkdownV2 inline-code backticks."""
-    return markdown_decoration.code(text)
+    """Wrap escaped text in an HTML inline-code tag."""
+    return f"<code>{html.escape(text)}</code>"
 
 
 def pre(text: str) -> str:
-    """Wrap text in a MarkdownV2 pre-formatted code block."""
-    return markdown_decoration.pre(text)
+    """Wrap escaped text in an HTML pre-formatted block."""
+    return f"<pre>{html.escape(text)}</pre>"
 
 
 def link(text: str, url: str) -> str:
-    """Build a MarkdownV2 hyperlink."""
-    return markdown_decoration.link(text, url)
+    """Build an HTML hyperlink. URL is not escaped — callers must supply safe URLs."""
+    return f'<a href="{url}">{html.escape(text)}</a>'
 
 
 async def answer_markdown(

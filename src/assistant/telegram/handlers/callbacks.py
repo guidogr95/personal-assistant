@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+
 import structlog
 from aiogram import F, Router
 from aiogram.types import CallbackQuery, Message
@@ -44,7 +46,10 @@ async def on_delete_confirm(callback: CallbackQuery) -> None:
     if deleted:
         await callback.answer("Deleted.")
         if isinstance(callback.message, Message):
-            await callback.message.edit_text(f"🗑 *{filename}* has been deleted.")
+            await callback.message.edit_text(
+                f"🗑 <b>{html.escape(filename)}</b> has been deleted.",
+                parse_mode="HTML",
+            )
     else:
         await callback.answer("Note not found — it may have already been deleted.", show_alert=True)
 
@@ -59,7 +64,7 @@ async def on_delete_cancel(callback: CallbackQuery) -> None:
     pending_deletions.pop(callback.from_user.id, None)
     await callback.answer("Cancelled.")
     if isinstance(callback.message, Message):
-        await callback.message.edit_text("Deletion cancelled — note kept.")
+        await callback.message.edit_text("Deletion cancelled — note kept.", parse_mode="HTML")
 
 
 @router.callback_query()
