@@ -111,6 +111,7 @@ services:
     restart: unless-stopped
     volumes:
       - notes_data:/var/syncthing
+      - ./syncthing/.stignore:/var/syncthing/.stignore
     ports:
       - "22000:22000"
       - "127.0.0.1:8384:8384"
