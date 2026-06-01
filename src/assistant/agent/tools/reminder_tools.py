@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from pydantic_ai import Agent, RunContext
@@ -9,6 +12,7 @@ from pydantic_ai import Agent, RunContext
 from assistant.scheduler.application.parse_reminder_time import parse_reminder_time
 from assistant.scheduler.application.register_checkin import register_checkin
 from assistant.scheduler.domain.repositories import ScheduledCheckInRepository
+from assistant.shared.config import settings
 
 logger = structlog.get_logger()
 
@@ -39,10 +43,17 @@ def register_reminder_tools(agent: Agent[None, str]) -> None:
     async def set_reminder(ctx: RunContext[None], time_expr: str, message: str) -> str:
         """Set a reminder that sends a message at the specified time.
 
-        Always call ``get_current_time`` first.  The time expression is parsed
-        relative to the current server time, so you must know the current time
-        and timezone before interpreting expressions like "in 30 minutes" or
-        "tomorrow at 9am".  Do not guess the current time.
+        MANDATORY: call ``get_current_time`` before this tool, every time, no
+        exceptions.  The response tells you both the user's active local timezone
+        and the current UTC time::
+
+            "Local: 2026-06-01 20:50:00 (America/Guayaquil, UTC-5) | UTC: 2026-06-02 01:50:00"
+
+        Always assume the user is referring to their local timezone (the one
+        shown in the ``Local:`` part).  "Tomorrow at 9am" means 9am in that
+        timezone — convert to UTC before calling this tool.  Relative
+        expressions like "in 30 minutes" are always safe (they use the server
+        clock directly).  Do not guess the current time or timezone.
 
         The bot will send the reminder message to Telegram automatically without
         any user prompt.  The time expression can be one-off or recurring.
@@ -58,7 +69,8 @@ def register_reminder_tools(agent: Agent[None, str]) -> None:
 
         Args:
             time_expr: Natural language time expression (see examples above).
-                Include the timezone context from get_current_time if relevant.
+                Pass the expression as-is using the user's local time — do NOT
+                pre-convert to UTC.  The tool resolves the timezone internally.
             message: The reminder text to send when the time arrives.
         """
         repo = _checkin_repo
@@ -67,7 +79,16 @@ def register_reminder_tools(agent: Agent[None, str]) -> None:
             return "Reminder tools are not configured."
 
         try:
-            fire_at, cron_expr = parse_reminder_time(time_expr)
+            tz = ZoneInfo(settings.timezone)
+        except KeyError:
+            return f"Server timezone '{settings.timezone}' is not a valid IANA timezone name. Contact the administrator."
+
+        try:
+            fire_at, cron_expr = parse_reminder_time(
+                time_expr,
+                now=datetime.now(tz),
+                tz=tz,
+            )
         except ValueError as exc:
             return f"Couldn't parse time expression: {exc}"
 
@@ -78,6 +99,7 @@ def register_reminder_tools(agent: Agent[None, str]) -> None:
                 cron_expr=cron_expr or "",
                 fire_at=fire_at,
                 max_runs=1 if fire_at else None,
+                timezone=tz,
                 repo=repo,
                 scheduler=sched,
             )

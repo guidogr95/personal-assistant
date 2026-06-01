@@ -120,3 +120,22 @@ def test_should_reach_max_runs_on_one_off() -> None:
     checkin = ScheduledCheckIn(name="A", fire_at=future, message="Task.", max_runs=1)
     checkin.increment_run()
     assert checkin.has_reached_max_runs() is True
+
+
+def test_should_store_cron_timezone() -> None:
+    checkin = ScheduledCheckIn(
+        name="Morning Tasks",
+        cron_expr="0 9 * * *",
+        instructions="Summarise tasks.",
+        cron_timezone="America/Guayaquil",
+    )
+    assert checkin.cron_timezone == "America/Guayaquil"
+
+
+def test_cron_timezone_defaults_to_none() -> None:
+    checkin = ScheduledCheckIn(
+        name="Morning Tasks",
+        cron_expr="0 9 * * *",
+        instructions="Summarise tasks.",
+    )
+    assert checkin.cron_timezone is None

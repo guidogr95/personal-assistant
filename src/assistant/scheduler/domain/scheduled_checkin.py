@@ -30,6 +30,7 @@ class ScheduledCheckIn:
     fire_at: datetime | None = None
     max_runs: int | None = None
     run_count: int = 0
+    cron_timezone: str | None = None
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     enabled: bool = True
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))

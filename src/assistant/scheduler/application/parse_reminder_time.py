@@ -13,7 +13,8 @@ Supported formats (explicitly bounded — anything else raises ValueError):
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 # Pre-compiled regex patterns for supported expressions
 _IN_MINUTES_RE = re.compile(r"^in\s+(\d+)\s+minutes?$", re.IGNORECASE)
@@ -62,20 +63,34 @@ def _parse_hour_minute(hour_str: str, minute_str: str | None, ampm: str | None) 
 def parse_reminder_time(
     time_expr: str,
     now: datetime | None = None,
+    tz: ZoneInfo | None = None,
 ) -> tuple[datetime | None, str | None]:
     """Parse a natural-language time expression into a fire datetime or cron string.
 
     Args:
         time_expr: Natural language time expression.
-        now: Reference datetime (defaults to UTC now).  Used for testing.
+        now: Reference datetime used for date arithmetic.  Defaults to the
+            current time in ``tz``.  Callers should pass
+            ``datetime.now(tz)`` explicitly rather than relying on the
+            default when a specific timezone matters.
+        tz: Timezone for interpreting absolute times like "tomorrow at 9am"
+            and "at 15:30 today".  Also used as the default timezone for
+            ``now`` when that argument is omitted.  Defaults to UTC, which
+            preserves the previous behaviour for callers that do not pass it.
 
     Returns:
-        ``(fire_at, cron_expr)`` — exactly one is non-None.
+        ``(fire_at, cron_expr)`` — exactly one is non-None.  ``fire_at`` is
+        always a timezone-aware datetime in the supplied ``tz``.
 
     Raises:
         ValueError: If the expression is not in the supported set.
     """
-    reference = now or datetime.now(UTC)
+    # ZoneInfo("UTC") is not the same object as datetime.UTC, but is
+    # interchangeable for all arithmetic and comparison purposes.  The type
+    # annotation is ZoneInfo, so datetime.UTC (a timezone.utc instance) cannot
+    # be used here directly.
+    _tz: ZoneInfo = tz if tz is not None else ZoneInfo("UTC")
+    reference = now or datetime.now(_tz)
     expr = time_expr.strip().lower()
 
     # "in N minutes"
@@ -92,7 +107,7 @@ def parse_reminder_time(
     if m := _TOMORROW_AT_RE.match(expr):
         hour, minute = _parse_hour_minute(m.group(1), m.group(2), m.group(3))
         tomorrow = reference.date() + timedelta(days=1)
-        return datetime(tomorrow.year, tomorrow.month, tomorrow.day, hour, minute, tzinfo=UTC), None
+        return datetime(tomorrow.year, tomorrow.month, tomorrow.day, hour, minute, tzinfo=_tz), None
 
     # "next <weekday> at HH:MM[am|pm]"
     if m := _NEXT_DAY_AT_RE.match(expr):
@@ -109,7 +124,7 @@ def parse_reminder_time(
                 target_date.day,
                 hour,
                 minute,
-                tzinfo=UTC,
+                tzinfo=_tz,
             ),
             None,
         )
@@ -117,7 +132,7 @@ def parse_reminder_time(
     # "at HH:MM[am|pm] today"
     if m := _AT_TODAY_RE.match(expr):
         hour, minute = _parse_hour_minute(m.group(1), m.group(2), m.group(3))
-        target = datetime(reference.year, reference.month, reference.day, hour, minute, tzinfo=UTC)
+        target = datetime(reference.year, reference.month, reference.day, hour, minute, tzinfo=_tz)
         if target <= reference:
             raise ValueError("Specified time is in the past")
         return target, None

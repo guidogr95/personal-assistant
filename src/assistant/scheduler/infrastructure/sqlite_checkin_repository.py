@@ -28,6 +28,7 @@ def _row_to_checkin(row: aiosqlite.Row) -> ScheduledCheckIn:
 
     max_runs_raw = _get("max_runs")
     run_count_raw = _get("run_count")
+    cron_timezone_raw = _get("cron_timezone")
 
     return ScheduledCheckIn(
         id=row["id"],
@@ -38,6 +39,7 @@ def _row_to_checkin(row: aiosqlite.Row) -> ScheduledCheckIn:
         fire_at=fire_at,
         max_runs=int(max_runs_raw) if max_runs_raw is not None else None,
         run_count=int(run_count_raw) if run_count_raw is not None else 0,
+        cron_timezone=cron_timezone_raw,
         enabled=bool(row["enabled"]),
         created_at=created_at,
     )
@@ -57,17 +59,19 @@ class SQLiteScheduledCheckInRepository(ScheduledCheckInRepository):
                     """
                     INSERT INTO scheduled_checkins
                         (id, name, cron_expr, instructions, message,
-                         fire_at, max_runs, run_count, enabled, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         fire_at, max_runs, run_count, enabled, created_at,
+                         cron_timezone)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
-                        name         = excluded.name,
-                        cron_expr    = excluded.cron_expr,
-                        instructions = excluded.instructions,
-                        message      = excluded.message,
-                        fire_at      = excluded.fire_at,
-                        max_runs     = excluded.max_runs,
-                        run_count    = excluded.run_count,
-                        enabled      = excluded.enabled
+                        name          = excluded.name,
+                        cron_expr     = excluded.cron_expr,
+                        instructions  = excluded.instructions,
+                        message       = excluded.message,
+                        fire_at       = excluded.fire_at,
+                        max_runs      = excluded.max_runs,
+                        run_count     = excluded.run_count,
+                        enabled       = excluded.enabled,
+                        cron_timezone = excluded.cron_timezone
                     """,
                     (
                         checkin.id,
@@ -80,6 +84,7 @@ class SQLiteScheduledCheckInRepository(ScheduledCheckInRepository):
                         checkin.run_count,
                         int(checkin.enabled),
                         checkin.created_at.isoformat(),
+                        checkin.cron_timezone,
                     ),
                 )
                 await db.commit()

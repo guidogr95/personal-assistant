@@ -5,13 +5,11 @@ from __future__ import annotations
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from assistant.telegram.handlers.tool_commands import (
-    _McpTool,
     _build_fallback_html,
     _build_summary_prompt,
     _fetch_mcp_tools,
+    _McpTool,
 )
 
 # ---------------------------------------------------------------------------
@@ -121,7 +119,9 @@ async def test_should_parse_sse_wrapped_response() -> None:
     mock_client.__aexit__ = AsyncMock(return_value=None)
     mock_client.post = AsyncMock(return_value=_make_response(_sse_wrap(_TOOLS_PAYLOAD)))
 
-    with patch("assistant.telegram.handlers.tool_commands.httpx.AsyncClient", return_value=mock_client):
+    with patch(
+        "assistant.telegram.handlers.tool_commands.httpx.AsyncClient", return_value=mock_client
+    ):
         result = await _fetch_mcp_tools()
 
     assert result is not None
@@ -134,11 +134,11 @@ async def test_should_parse_plain_json_response() -> None:
     mock_client = AsyncMock()
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=None)
-    mock_client.post = AsyncMock(
-        return_value=_make_response(json.dumps(_TOOLS_PAYLOAD))
-    )
+    mock_client.post = AsyncMock(return_value=_make_response(json.dumps(_TOOLS_PAYLOAD)))
 
-    with patch("assistant.telegram.handlers.tool_commands.httpx.AsyncClient", return_value=mock_client):
+    with patch(
+        "assistant.telegram.handlers.tool_commands.httpx.AsyncClient", return_value=mock_client
+    ):
         result = await _fetch_mcp_tools()
 
     assert result is not None
@@ -152,7 +152,9 @@ async def test_should_return_none_when_http_raises() -> None:
     mock_client.__aexit__ = AsyncMock(return_value=None)
     mock_client.post = AsyncMock(side_effect=Exception("Connection refused"))
 
-    with patch("assistant.telegram.handlers.tool_commands.httpx.AsyncClient", return_value=mock_client):
+    with patch(
+        "assistant.telegram.handlers.tool_commands.httpx.AsyncClient", return_value=mock_client
+    ):
         result = await _fetch_mcp_tools()
 
     assert result is None
@@ -165,7 +167,9 @@ async def test_should_return_none_when_result_is_not_dict() -> None:
     mock_client.__aexit__ = AsyncMock(return_value=None)
     mock_client.post = AsyncMock(return_value=_make_response(json.dumps(payload)))
 
-    with patch("assistant.telegram.handlers.tool_commands.httpx.AsyncClient", return_value=mock_client):
+    with patch(
+        "assistant.telegram.handlers.tool_commands.httpx.AsyncClient", return_value=mock_client
+    ):
         result = await _fetch_mcp_tools()
 
     assert result is None
@@ -188,7 +192,9 @@ async def test_should_skip_tools_without_string_name() -> None:
     mock_client.__aexit__ = AsyncMock(return_value=None)
     mock_client.post = AsyncMock(return_value=_make_response(json.dumps(payload)))
 
-    with patch("assistant.telegram.handlers.tool_commands.httpx.AsyncClient", return_value=mock_client):
+    with patch(
+        "assistant.telegram.handlers.tool_commands.httpx.AsyncClient", return_value=mock_client
+    ):
         result = await _fetch_mcp_tools()
 
     assert result is not None

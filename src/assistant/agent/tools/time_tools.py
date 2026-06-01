@@ -31,7 +31,12 @@ def register_time_tools(agent: Agent[None, str]) -> None:
         - The user asks "What day is it today?"
 
         Returns:
-            A string like ``"Current time: 2026-06-01 14:30:00 (America/Guayaquil)"``.
+            A string like::
+
+                "Local: 2026-06-01 20:50:00 (America/Guayaquil, UTC-5) | UTC: 2026-06-02 01:50:00"
+
+            The ``UTC:`` portion is always present and ready to use directly
+            as a base for computing ``fire_at`` values.
         """
         result = _get_current_time()
         logger.info("get_current_time_tool", result=result)

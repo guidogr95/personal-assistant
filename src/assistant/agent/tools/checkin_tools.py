@@ -53,10 +53,18 @@ def register_checkin_tools(agent: Agent[None, str]) -> None:
 
         The bot will send output to Telegram automatically on the given schedule.
 
-        Always call ``get_current_time`` first.  All times are stored in UTC.
-        Use the offset reported by ``get_current_time`` to convert the user's
-        local time to UTC before setting ``cron_expr`` or ``fire_at``.
-        Do not guess the current time or timezone offset.
+        MANDATORY: call ``get_current_time`` before this tool, every time, no
+        exceptions.  The response includes both the user's local time and the
+        UTC equivalent::
+
+            "Local: 2026-06-01 20:50:00 (America/Guayaquil, UTC-5) | UTC: 2026-06-02 01:50:00"
+
+        Use the ``UTC:`` value directly as the reference point for all time
+        arithmetic.  Never guess the current time.  When the user says "in 5
+        minutes", take the UTC value, add 5 minutes, and pass that as
+        ``fire_at``.  When the user says "at 9am", assume they mean 9am in
+        their local timezone (shown in the ``Local:`` part) and convert to UTC
+        using the offset before setting ``cron_expr`` or ``fire_at``.
 
         Args:
             name: Short label for the check-in (e.g. "Morning Tasks").
@@ -83,12 +91,18 @@ def register_checkin_tools(agent: Agent[None, str]) -> None:
             )
 
         # Parse fire_at string to datetime if provided
+        from datetime import UTC as _UTC
         from datetime import datetime as _dt
 
         fire_at_dt: _dt | None = None
         if fire_at.strip():
             try:
                 fire_at_dt = _dt.fromisoformat(fire_at.strip())
+                # fromisoformat returns a naive datetime when no timezone suffix
+                # is present (e.g. "2026-06-01T20:43:59" from the LLM).
+                # Treat naive datetimes as UTC so downstream comparisons work.
+                if fire_at_dt.tzinfo is None:
+                    fire_at_dt = fire_at_dt.replace(tzinfo=_UTC)
             except ValueError:
                 return f"Invalid fire_at datetime: '{fire_at}'. Use ISO-8601 format."
 

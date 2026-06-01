@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 import structlog
 from aiogram import Bot, Dispatcher
@@ -93,7 +94,8 @@ async def main() -> None:
     one_off_count = 0
     for checkin in enabled_checkins:
         if checkin.cron_expr:
-            register_checkin_job(scheduler, checkin.id, checkin.cron_expr, run_checkin)
+            tz = ZoneInfo(checkin.cron_timezone) if checkin.cron_timezone else None
+            register_checkin_job(scheduler, checkin.id, checkin.cron_expr, run_checkin, timezone=tz)
             recurring_count += 1
         elif checkin.fire_at and checkin.fire_at > datetime.now(UTC):
             register_one_off_job(scheduler, checkin.id, checkin.fire_at, run_checkin)

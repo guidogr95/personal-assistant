@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -29,11 +30,17 @@ def register_checkin_job(
     checkin_id: str,
     cron_expr: str,
     job_func: Callable[[str], Awaitable[None]],
+    timezone: ZoneInfo | None = None,
 ) -> None:
     """Add or replace a check-in job in the scheduler.
 
     Assumes cron_expr has already been validated by ScheduledCheckIn.__post_init__.
     Uses replace_existing=True so re-registration at startup is idempotent.
+
+    Args:
+        timezone: Timezone in which cron fields are interpreted.  Defaults to
+            UTC (the scheduler's base timezone).  Pass the user's local
+            ZoneInfo so that e.g. ``"0 9 * * *"`` fires at 9am local time.
     """
     minute, hour, day, month, day_of_week = cron_expr.strip().split()
     trigger = CronTrigger(
@@ -42,6 +49,7 @@ def register_checkin_job(
         day=day,
         month=month,
         day_of_week=day_of_week,
+        timezone=timezone,
     )
     scheduler.add_job(
         job_func,

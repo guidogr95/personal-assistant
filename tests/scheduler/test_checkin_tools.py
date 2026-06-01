@@ -227,3 +227,55 @@ async def test_should_return_not_found_message_when_checkin_missing() -> None:
 
     repo.delete.assert_not_awaited()
     assert "no check-in named" in result.lower()
+
+
+# ---------------------------------------------------------------------------
+# Regression: naive fire_at from LLM must not raise TypeError
+# ---------------------------------------------------------------------------
+
+
+async def test_should_accept_naive_fire_at_and_treat_as_utc() -> None:
+    """LLM passes fire_at without a timezone suffix (e.g. "2026-06-01T20:43:59").
+
+    fromisoformat produces a naive datetime.  Before the fix this caused:
+        TypeError: can't compare offset-naive and offset-aware datetimes
+    inside register_checkin.  The tool must accept it by treating it as UTC.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    repo = _make_repo()
+    scheduler = _make_scheduler()
+    configure_checkin_tools(scheduler=scheduler, checkin_repo=repo)
+
+    mock_agent = MagicMock()
+    registered_tools: dict[str, object] = {}
+
+    def capture_tool(fn: object) -> object:
+        import inspect
+
+        if inspect.iscoroutinefunction(fn):
+            registered_tools[fn.__name__] = fn  # type: ignore[union-attr]
+        return fn
+
+    mock_agent.tool = capture_tool
+
+    from assistant.agent.tools.checkin_tools import register_checkin_tools
+
+    register_checkin_tools(mock_agent)  # type: ignore[arg-type]
+
+    # ISO-8601 without timezone — what the LLM typically sends
+    future_naive = (datetime.now(UTC) + timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%S")
+
+    tool_fn = registered_tools["schedule_checkin"]
+    result = await tool_fn(
+        None,
+        "One-off news checkin",
+        instructions="List the 5 latest world news.",
+        fire_at=future_naive,
+        max_runs=1,
+    )  # type: ignore[operator]
+
+    # Must not raise; must schedule and confirm
+    repo.save.assert_awaited_once()
+    scheduler.add_job.assert_called_once()
+    assert "One-off news checkin" in result

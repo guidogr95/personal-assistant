@@ -115,7 +115,7 @@ async def _migrate_checkin_instructions_column(db: aiosqlite.Connection) -> None
 
 
 async def _migrate_checkin_new_columns(db: aiosqlite.Connection) -> None:
-    """Add message, max_runs, run_count, fire_at columns if missing.
+    """Add message, max_runs, run_count, fire_at, cron_timezone columns if missing.
 
     Applies once on databases created before Phase 6.5.  Safe to run on
     databases that already have the columns — SQLite ignores duplicate
@@ -129,6 +129,7 @@ async def _migrate_checkin_new_columns(db: aiosqlite.Connection) -> None:
         ("max_runs", "INTEGER"),
         ("run_count", "INTEGER NOT NULL DEFAULT 0"),
         ("fire_at", "TEXT"),
+        ("cron_timezone", "TEXT"),
     ]
     for col_name, col_type in new_columns:
         if col_name not in columns:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -23,6 +24,7 @@ async def register_checkin(
     cron_expr: str = "",
     fire_at: datetime | None = None,
     max_runs: int | None = None,
+    timezone: ZoneInfo | None = None,
     repo: ScheduledCheckInRepository | None = None,
     scheduler: AsyncIOScheduler | None = None,
 ) -> ScheduledCheckIn:
@@ -35,6 +37,9 @@ async def register_checkin(
         cron_expr: Standard 5-field cron expression (for recurring jobs).
         fire_at: Exact datetime to fire (for one-off jobs).
         max_runs: Maximum number of firings before auto-disable. None = infinite.
+        timezone: Timezone used to interpret cron fields.  Defaults to UTC.
+            Pass the user's local ZoneInfo so cron times fire at the expected
+            local hour.
         repo: Check-in repository.
         scheduler: APScheduler instance.
 
@@ -55,11 +60,14 @@ async def register_checkin(
         cron_expr=cron_expr,
         fire_at=fire_at,
         max_runs=max_runs,
+        cron_timezone=str(timezone) if timezone else None,
     )
     await repo.save(checkin)
 
     if checkin.cron_expr:
-        register_checkin_job(scheduler, checkin.id, checkin.cron_expr, run_checkin)
+        register_checkin_job(
+            scheduler, checkin.id, checkin.cron_expr, run_checkin, timezone=timezone
+        )
     elif checkin.fire_at:
         register_one_off_job(scheduler, checkin.id, checkin.fire_at, run_checkin)
 
@@ -69,5 +77,6 @@ async def register_checkin(
         name=name,
         cron_expr=cron_expr,
         fire_at=fire_at.isoformat() if fire_at else None,
+        timezone=str(timezone) if timezone else "UTC",
     )
     return checkin
