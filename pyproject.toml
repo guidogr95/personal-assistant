@@ -9,6 +9,8 @@ dependencies = [
     "aiogram>=3.0",
     "aiosqlite>=0.20",
     "apscheduler>=3.10",
+    "faster-whisper>=1.0",
+    "groq>=0.9",
     "httpx>=0.27",
     "pydantic>=2.0",
     "pydantic-ai>=0.2.0",
@@ -16,6 +18,8 @@ dependencies = [
     "rebrowser-playwright>=1.47.0",
     "sqlalchemy[asyncio]>=2.0",
     "structlog>=24.0",
+    "yt-dlp>=2024.0",
+    "youtube-transcript-api>=0.6",
 ]
 
 [dependency-groups]
@@ -37,6 +41,18 @@ plugins = ["pydantic.mypy"]
 module = "apscheduler.*"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "faster_whisper.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "youtube_transcript_api.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "yt_dlp.*"
+ignore_missing_imports = true
+
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "ANN", "S", "B", "A"]
@@ -47,6 +63,9 @@ select = ["E", "F", "I", "N", "UP", "ANN", "S", "B", "A"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 pythonpath = ["src"]
+markers = [
+    "integration: tests that hit real external services (may be slow or flaky)",
+]
 
 [tool.ruff]
 target-version = "py312"

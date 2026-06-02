@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import structlog
 from pydantic_ai.exceptions import ModelHTTPError
 from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter, ToolReturnPart
@@ -17,6 +19,10 @@ from assistant.shared.exceptions import (
 )
 
 logger = structlog.get_logger()
+
+# Per-user locks serialise concurrent turns, preventing the read-modify-write
+# race on session.message_history_json when two messages arrive simultaneously.
+_user_locks: dict[int, asyncio.Lock] = {}
 
 _BILLING_ERROR_TYPES = frozenset({"CreditsError", "InsufficientCredits"})
 
@@ -73,6 +79,25 @@ async def run_turn(
         NoActiveSessionError: if no active session exists for the user.
         LLMUnavailableError: if the LLM provider rejects or fails the request.
     """
+    lock = _user_locks.setdefault(user_id, asyncio.Lock())
+    async with lock:
+        return await _run_turn_locked(
+            user_id=user_id,
+            user_message=user_message,
+            session_repo=session_repo,
+            turn_repo=turn_repo,
+            prompt_repo=prompt_repo,
+        )
+
+
+async def _run_turn_locked(
+    user_id: int,
+    user_message: str,
+    session_repo: SessionRepository,
+    turn_repo: TurnRepository,
+    prompt_repo: PromptRepository,
+) -> str:
+    """Inner implementation of run_turn, executed under the per-user lock."""
     session = await session_repo.get_active_for_user(user_id)
     if session is None:
         raise NoActiveSessionError(f"No active session for user {user_id}")

@@ -114,6 +114,34 @@ class MarkdownNoteRepository:
             reverse=True,
         )
 
+    async def find_by_title(self, title: str) -> Note | None:
+        """Return the most recent note whose title matches ``title``.
+
+        Matching is case-insensitive and strips surrounding whitespace.
+        If multiple notes share the same title, the newest is returned.
+        """
+        target = title.strip().lower()
+        candidates = sorted(
+            self._vault.glob("*.md"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        for path in candidates:
+            async with aiofiles.open(path, encoding="utf-8") as f:
+                content = await f.read()
+            note_title = self._extract_title(path.name, content).strip().lower()
+            if note_title == target:
+                stat = path.stat()
+                ts = datetime.fromtimestamp(stat.st_mtime, tz=UTC)
+                return Note(
+                    filename=path.name,
+                    title=note_title,
+                    content=content,
+                    created_at=ts,
+                    modified_at=ts,
+                )
+        return None
+
     async def update(self, filename: str, content: str) -> Note | None:
         """Overwrite ``filename`` with ``content`` and return the updated Note.
 

@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     # Alarms
     autoremote_key: str = ""  # required from Phase 7 (calendar/alarms)
 
+    # Video transcription — optional; falls back to local Whisper if absent
+    groq_api_key: str = ""
+    # path to node binary for yt-dlp JS challenge solver; auto-detected if empty
+    node_path: str = ""
+
     # Google Calendar — optional until Phase 7
     google_client_id: str = ""
     google_client_secret: str = ""
@@ -50,4 +55,4 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
 
-settings = Settings()
+settings = Settings()  # type: ignore[call-arg] — BaseSettings loads from env vars at runtime

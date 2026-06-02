@@ -36,3 +36,15 @@ class LLMUnavailableError(AssistantError):
 
 class CheckInNotFoundError(AssistantError):
     """Raised when a requested ScheduledCheckIn does not exist."""
+
+
+class UnsupportedPlatformError(AssistantError):
+    """Raised when a video URL does not match any supported platform."""
+
+
+class AudioExtractionError(AssistantError):
+    """Raised when yt-dlp fails to extract audio from a video URL."""
+
+
+class TranscriptionError(AssistantError):
+    """Raised when all transcription methods fail for a given audio file."""

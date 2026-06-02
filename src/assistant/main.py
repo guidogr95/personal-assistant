@@ -12,11 +12,13 @@ from assistant.agent.domain.agent import agent
 from assistant.agent.tools.checkin_tools import configure_checkin_tools
 from assistant.agent.tools.prompt_tools import configure_prompt_tools
 from assistant.agent.tools.reminder_tools import configure_reminder_tools
+from assistant.agent.tools.video_tools import register_video_tools
 from assistant.conversation.infrastructure.sqlite_repositories import (
     SQLiteSessionRepository,
     SQLiteTurnRepository,
     init_db,
 )
+from assistant.notes.infrastructure.markdown_repository import MarkdownNoteRepository
 from assistant.prompts.infrastructure.sqlite_prompt_repository import SQLitePromptRepository
 from assistant.scheduler.application.run_checkin import configure_checkin_runner, run_checkin
 from assistant.scheduler.infrastructure.apscheduler_registry import (
@@ -38,6 +40,11 @@ from assistant.telegram.handlers import (
     prompt_commands,
     session_commands,
     tool_commands,
+    video_commands,
+)
+from assistant.video.application.transcription_queue import (
+    configure_transcription_queue,
+    start_worker,
 )
 
 configure_logging()
@@ -54,6 +61,7 @@ async def main() -> None:
     turn_repo = SQLiteTurnRepository(settings.sqlite_path)
     checkin_repo = SQLiteScheduledCheckInRepository(settings.sqlite_path)
     prompt_repo = SQLitePromptRepository(settings.sqlite_path)
+    note_repo = MarkdownNoteRepository()
 
     bot = Bot(token=settings.telegram_bot_token)
     await bot.set_my_commands(
@@ -66,6 +74,7 @@ async def main() -> None:
             BotCommand(command="time", description="Show current server time"),
             BotCommand(command="tools", description="List all tools the agent has access to"),
             BotCommand(command="system", description="Show or update system prompt"),
+            BotCommand(command="transcribe", description="Transcribe a video URL"),
         ]
     )
     dp = Dispatcher()
@@ -80,6 +89,7 @@ async def main() -> None:
     dp.include_router(tool_commands.router)
     dp.include_router(prompt_commands.router)
     dp.include_router(callbacks.router)
+    dp.include_router(video_commands.router)
     dp.include_router(message.router)
 
     scheduler = create_scheduler()
@@ -87,6 +97,10 @@ async def main() -> None:
     configure_checkin_tools(scheduler=scheduler, checkin_repo=checkin_repo)
     configure_reminder_tools(scheduler=scheduler, checkin_repo=checkin_repo)
     configure_prompt_tools(prompt_repo=prompt_repo)
+    configure_transcription_queue(bot=bot, note_repo=note_repo)
+    register_video_tools(agent)
+    asyncio.create_task(start_worker())
+    logger.info("transcription_worker_task_created")
 
     # Re-register all enabled check-ins from DB so jobs survive bot restarts.
     enabled_checkins = [c for c in await checkin_repo.list_all() if c.enabled]

@@ -27,6 +27,14 @@ class NoteRepository(Protocol):
         """Return all notes whose content contains ``query`` (case-insensitive)."""
         ...
 
+    async def find_by_title(self, title: str) -> Note | None:
+        """Return the most recent note whose title matches ``title``.
+
+        Matching is case-insensitive and strips surrounding whitespace.
+        If multiple notes share the same title, the newest is returned.
+        """
+        ...
+
     async def list_all(self) -> list[str]:
         """Return all note filenames, newest first."""
         ...

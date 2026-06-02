@@ -5,6 +5,7 @@ from __future__ import annotations
 import structlog
 from pydantic_ai import Agent, RunContext
 
+from assistant.notes.application.find_note_by_title import find_note_by_title
 from assistant.notes.application.find_notes import find_notes
 from assistant.notes.application.list_notes import list_notes
 from assistant.notes.application.read_note import read_note
@@ -32,18 +33,31 @@ def register_notes_tools(agent: Agent[None, str]) -> None:
 
     @agent.tool
     async def create_note(ctx: RunContext[None], title: str, content: str) -> str:
-        """Create a new Markdown note in the vault.
+        """Create a new Markdown note in the vault, or update an existing one.
 
-        Before calling this tool, use ``search_notes`` to check whether a note
-        with the same or a very similar title already exists.  If a matching
-        note is found, use ``update_note`` instead of creating a duplicate.
+        This tool FIRST checks whether a note with the exact same title already
+        exists.  If it does, the existing note is updated in place (its content
+        is overwritten) rather than creating a duplicate.  The filename is never
+        changed on update.
+
+        Only when no matching note exists does it create a brand-new file with
+        a timestamped filename.
 
         Args:
-            title: Short descriptive title (becomes the H1 heading and filename).
+            title: Short descriptive title (becomes the H1 heading and filename
+                for new notes).  Used as the lookup key for existing notes.
             content: Note body in Markdown format.  Include only what the user
                 explicitly asked to write — do not add extra context, summaries,
                 or sections the user did not request.
         """
+        existing = await find_note_by_title(title, _repo)
+        if existing is not None:
+            note = await _update_note(existing.filename, content, _repo)
+            if note is None:
+                return f"Note not found: {existing.filename}"
+            logger.info("create_note_updated_existing", filename=note.filename, title=title)
+            return f"Note updated (was: {existing.filename}): {note.filename}"
+
         note = await save_note(title, content, _repo)
         logger.info("create_note_tool", filename=note.filename)
         return f"Note saved: {note.filename}"

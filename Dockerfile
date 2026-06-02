@@ -14,7 +14,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
     libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 \
     libasound2 libx11-xcb1 fonts-liberation \
+    ffmpeg nodejs \
     && rm -rf /var/lib/apt/lists/*
+
+# Create whisper model cache directory with open permissions so the app can
+# download model weights on first run regardless of the runtime user ID.
+RUN mkdir -p /data/whisper-models && chmod 777 /data/whisper-models
 
 # Install dependencies first (separate layer for caching)
 COPY pyproject.toml uv.lock ./
