@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from assistant.telegram.markdown_to_html import convert_markdown_to_telegram_html
 
 
@@ -95,3 +93,11 @@ class TestConvertMarkdownToTelegramHtml:
         md = "Just plain text."
         result = convert_markdown_to_telegram_html(md)
         assert "Just plain text." in result
+
+    def test_should_strip_details_and_summary_tags(self) -> None:
+        md = "<details><summary>Click me</summary>Hidden content</details>"
+        result = convert_markdown_to_telegram_html(md)
+        assert "<details>" not in result
+        assert "<summary>" not in result
+        assert "Click me" in result
+        assert "Hidden content" in result

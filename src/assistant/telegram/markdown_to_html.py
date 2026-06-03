@@ -26,9 +26,7 @@ def convert_markdown_to_telegram_html(markdown_text: str) -> str:
     """
     raw_html = mistune.html(markdown_text)
     if not isinstance(raw_html, str):
-        raise TypeError(
-            f"Expected str from mistune.html, got {type(raw_html).__name__}"
-        )
+        raise TypeError(f"Expected str from mistune.html, got {type(raw_html).__name__}")
     return _map_unsupported_tags(raw_html)
 
 
@@ -145,8 +143,7 @@ def _extract_list_items(content: str) -> list[str]:
 def _strip_li_tags(item_text: str) -> str:
     """Remove any remaining <li> / </li> tags from item text."""
     return (
-        item_text
-        .replace("<li>", "")
+        item_text.replace("<li>", "")
         .replace("</li>", "")
         .replace("<LI>", "")
         .replace("</LI>", "")
@@ -190,9 +187,60 @@ def _strip_remaining_unsupported_tags(html_text: str) -> str:
     """
     # List of tags that Telegram does NOT support (that might remain)
     unsupported_tags = [
-        "div", "span", "table", "thead", "tbody", "tr", "td", "th",
-        "hr", "dl", "dt", "dd", "figure", "figcaption", "main",
-        "article", "section", "header", "footer", "nav", "aside",
+        "div",
+        "span",
+        "table",
+        "thead",
+        "tbody",
+        "tr",
+        "td",
+        "th",
+        "hr",
+        "dl",
+        "dt",
+        "dd",
+        "figure",
+        "figcaption",
+        "main",
+        "article",
+        "section",
+        "header",
+        "footer",
+        "nav",
+        "aside",
+        "details",
+        "summary",
+        "sub",
+        "sup",
+        "kbd",
+        "mark",
+        "small",
+        "big",
+        "font",
+        "center",
+        "cite",
+        "q",
+        "samp",
+        "var",
+        "time",
+        "ruby",
+        "rt",
+        "rp",
+        "bdi",
+        "wbr",
+        "embed",
+        "object",
+        "canvas",
+        "audio",
+        "video",
+        "source",
+        "track",
+        "datalist",
+        "output",
+        "progress",
+        "meter",
+        "menu",
+        "menuitem",
     ]
 
     for tag in unsupported_tags:

@@ -6,6 +6,7 @@ from pydantic_ai.providers.openai import OpenAIProvider
 
 from assistant.agent.tools.checkin_tools import register_checkin_tools
 from assistant.agent.tools.notes_tools import register_notes_tools
+from assistant.agent.tools.prompt_tools import register_prompt_tools
 from assistant.agent.tools.reminder_tools import register_reminder_tools
 from assistant.agent.tools.research_tools import register_research_tools
 from assistant.agent.tools.task_tools import register_task_tools
@@ -109,3 +110,4 @@ register_notes_tools(agent)
 register_task_tools(agent)
 register_checkin_tools(agent)
 register_reminder_tools(agent)
+register_prompt_tools(agent)
