@@ -9,7 +9,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from assistant.scheduler.application import delete_checkin, list_checkins, register_checkin
 from assistant.scheduler.domain.repositories import ScheduledCheckInRepository
 from assistant.shared.exceptions import CheckInNotFoundError
-from assistant.telegram.formatting import answer_markdown, bold, code
+from assistant.telegram.formatting import bold, code, send_message
 
 logger = structlog.get_logger()
 
@@ -17,10 +17,10 @@ router = Router()
 
 _USAGE = (
     "Usage:\n"
-    "<code>/checkin add &lt;name&gt; | &lt;cron 5-field&gt; | &lt;instructions&gt;</code>\n"
-    "<code>/checkin list</code>\n"
-    "<code>/checkin delete &lt;name&gt;</code>\n\n"
-    "Cron example: <code>0 9 * * *</code> = every day at 09:00 UTC"
+    "`/checkin add <name> | <cron 5-field> | <instructions>`\n"
+    "`/checkin list`\n"
+    "`/checkin delete <name>`\n\n"
+    "Cron example: `0 9 * * *` = every day at 09:00 UTC"
 )
 
 
@@ -53,7 +53,7 @@ async def cmd_checkin(
         await _handle_add(message, raw, checkin_repo, scheduler)
         return
 
-    await answer_markdown(message, _USAGE)
+    await send_message(message, _USAGE)
 
 
 async def _handle_list(
@@ -67,7 +67,7 @@ async def _handle_list(
     lines = [
         f"- {bold(c.name)} {code(c.cron_expr)} ({'on' if c.enabled else 'off'})" for c in checkins
     ]
-    await answer_markdown(message, "\n".join(lines))
+    await send_message(message, "\n".join(lines))
 
 
 async def _handle_delete(
@@ -77,9 +77,9 @@ async def _handle_delete(
     scheduler: AsyncIOScheduler,
 ) -> None:
     if not name:
-        await answer_markdown(
+        await send_message(
             message,
-            "Provide a check-in name: <code>/checkin delete &lt;name&gt;</code>",
+            "Provide a check-in name: `/checkin delete <name>`",
         )
         return
     try:
@@ -98,9 +98,9 @@ async def _handle_add(
     try:
         name, cron_expr, instructions = [p.strip() for p in raw.split("|", 2)]
     except ValueError:
-        await answer_markdown(
+        await send_message(
             message,
-            "Format: <code>/checkin add &lt;name&gt; | &lt;cron 5-field&gt; | &lt;instructions&gt;</code>",
+            "Format: `/checkin add <name> | <cron 5-field> | <instructions>`",
         )
         return
 
@@ -112,7 +112,7 @@ async def _handle_add(
             repo=checkin_repo,
             scheduler=scheduler,
         )
-        await answer_markdown(
+        await send_message(
             message,
             f"Check-in {bold(checkin.name)} registered with schedule {code(checkin.cron_expr)}.",
         )

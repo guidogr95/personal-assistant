@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from aiogram import Bot
 
 from assistant.scheduler.application.delete_checkin import delete_checkin_by_name
 from assistant.scheduler.application.list_checkins import list_all_checkins
@@ -201,7 +202,7 @@ async def test_should_run_checkin_and_send_message() -> None:
 
 
 async def test_should_send_failure_notification_when_agent_raises() -> None:
-    mock_bot = AsyncMock()
+    mock_bot = AsyncMock(spec=Bot)
     repo = _make_mock_repo(get_by_id=_VALID_CHECKIN)
     configure_checkin_runner(bot=mock_bot, checkin_repo=repo)
 

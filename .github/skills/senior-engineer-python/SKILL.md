@@ -156,6 +156,9 @@ for order in orders:
 
 **Config loading:** Load from environment variables. Use `@dataclass(frozen=True)` for typed config. Validate at startup — fail fast if required config is missing. Never silently fall back to insecure defaults.
 
+**Question existing assumptions:**
+Existing code is not immutable architecture. When a design choice (parse mode, data format, API style, module structure) is causing friction, evaluate whether changing the choice is simpler than working around it. Do not treat "this is how it was done" as justification for "this is how it must continue to be done." Before proposing a complex workaround, explicitly state the contrarian hypothesis: "What if we changed X instead?" and evaluate both paths.
+
 ---
 
 ## Success Checklist

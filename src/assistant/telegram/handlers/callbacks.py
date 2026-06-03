@@ -1,18 +1,29 @@
 from __future__ import annotations
 
-import html
-
 import structlog
 from aiogram import F, Router
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import BufferedInputFile, CallbackQuery, Message
 
+from assistant.agent.domain.agent import agent
 from assistant.conversation.application.resume_session import resume_session
 from assistant.conversation.domain.repositories import SessionRepository
 from assistant.notes.application.delete_note import delete_note
 from assistant.notes.infrastructure.markdown_repository import MarkdownNoteRepository
 from assistant.shared.exceptions import InfrastructureError, SessionNotFoundError
-from assistant.telegram.keyboards import parse_session_callback
-from assistant.telegram.pending_state import pending_deletions
+from assistant.telegram.handlers.tool_commands import (
+    _build_all_tools_markdown,
+    _build_category_detail_markdown,
+    _categorize_tools,
+    _fetch_mcp_tools,
+)
+from assistant.telegram.keyboards import (
+    build_tool_categories_keyboard,
+    build_tools_in_category_keyboard,
+    parse_session_callback,
+    parse_tool_category_callback,
+)
+from assistant.telegram.markdown_to_html import convert_markdown_to_telegram_html
+from assistant.telegram.pending_state import get_file_request, pending_deletions
 
 logger = structlog.get_logger()
 
@@ -47,7 +58,9 @@ async def on_delete_confirm(callback: CallbackQuery) -> None:
         await callback.answer("Deleted.")
         if isinstance(callback.message, Message):
             await callback.message.edit_text(
-                f"🗑 <b>{html.escape(filename)}</b> has been deleted.",
+                convert_markdown_to_telegram_html(
+                    f"🗑 **{filename}** has been deleted."
+                ),
                 parse_mode="HTML",
             )
     else:
@@ -64,7 +77,116 @@ async def on_delete_cancel(callback: CallbackQuery) -> None:
     pending_deletions.pop(callback.from_user.id, None)
     await callback.answer("Cancelled.")
     if isinstance(callback.message, Message):
-        await callback.message.edit_text("Deletion cancelled — note kept.", parse_mode="HTML")
+        await callback.message.edit_text(
+            "Deletion cancelled — note kept.", parse_mode="HTML"
+        )
+
+
+@router.callback_query()
+async def on_tool_category_tap(callback: CallbackQuery) -> None:
+    """Handle taps on the /tools category inline keyboard.
+
+    Shows tools in the selected category, returns to the category menu,
+    or sends a compact "Show All" listing.
+    """
+    if not callback.data or not callback.message:
+        await callback.answer()
+        return
+
+    parsed = parse_tool_category_callback(callback.data)
+    if parsed is None:
+        # Not a tool-category callback — let the next handler (session tap) try.
+        return
+
+    if parsed == ":back":
+        await callback.answer()
+        if isinstance(callback.message, Message):
+            await callback.message.edit_text(
+                convert_markdown_to_telegram_html(
+                    "**🛠️ Assistant Tools**\n\nTap a category to see the tools inside it:"
+                ),
+                parse_mode="HTML",
+                reply_markup=build_tool_categories_keyboard(),
+            )
+        return
+
+    if parsed == ":all":
+        await callback.answer("Loading all tools…")
+        try:
+            python_tools = {
+                name: (tool.description or "")
+                for name, tool in agent._function_toolset.tools.items()
+            }
+        except AttributeError:
+            logger.warning("agent_function_tools_unavailable")
+            python_tools = {}
+        mcp_tools = await _fetch_mcp_tools()
+        categorized = _categorize_tools(python_tools, mcp_tools)
+        chunks = _build_all_tools_markdown(categorized)
+        if isinstance(callback.message, Message):
+            await callback.message.edit_text(
+                convert_markdown_to_telegram_html(chunks[0]), parse_mode="HTML"
+            )
+            for extra_chunk in chunks[1:]:
+                await callback.message.answer(
+                    convert_markdown_to_telegram_html(extra_chunk), parse_mode="HTML"
+                )
+        return
+
+    # Specific category selected
+    category_name = parsed
+    try:
+        python_tools = {
+            name: (tool.description or "") for name, tool in agent._function_toolset.tools.items()
+        }
+    except AttributeError:
+        logger.warning("agent_function_tools_unavailable")
+        python_tools = {}
+    mcp_tools = await _fetch_mcp_tools()
+    categorized = _categorize_tools(python_tools, mcp_tools)
+    tools = categorized.get(category_name, [])
+
+    if not tools:
+        await callback.answer("No tools in this category.")
+        return
+
+    await callback.answer()
+    markdown_text = _build_category_detail_markdown(category_name, tools)
+    if isinstance(callback.message, Message):
+        await callback.message.edit_text(
+            convert_markdown_to_telegram_html(markdown_text),
+            parse_mode="HTML",
+            reply_markup=build_tools_in_category_keyboard(category_name),
+        )
+
+
+@router.callback_query(F.data.startswith("file:note:"))
+async def on_file_request(callback: CallbackQuery) -> None:
+    """Send a note as a document when the user taps the file-request button."""
+    if not callback.data or not callback.from_user or not callback.message:
+        await callback.answer()
+        return
+
+    file_hash = callback.data.removeprefix("file:note:")
+    filename = get_file_request(file_hash)
+    if filename is None:
+        await callback.answer(
+            "File request expired or invalid. Please request the note again.",
+            show_alert=True,
+        )
+        return
+
+    note = await _note_repo.read(filename)
+    if note is None:
+        await callback.answer("Note not found.", show_alert=True)
+        return
+
+    document = BufferedInputFile(
+        file=note.content.encode("utf-8"),
+        filename=note.filename,
+    )
+    await callback.message.answer_document(document)
+    await callback.answer("File sent.")
 
 
 @router.callback_query()

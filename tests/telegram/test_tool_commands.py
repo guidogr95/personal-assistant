@@ -6,82 +6,106 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from assistant.telegram.handlers.tool_commands import (
-    _build_fallback_html,
-    _build_summary_prompt,
+    _build_all_tools_markdown,
+    _build_category_detail_markdown,
+    _categorize_tools,
     _fetch_mcp_tools,
     _McpTool,
 )
 
 # ---------------------------------------------------------------------------
-# _build_summary_prompt
+# _categorize_tools
 # ---------------------------------------------------------------------------
 
 
-def test_should_include_all_python_tools_in_prompt() -> None:
-    tools = {"get_current_time": "Get the current time.", "create_note": "Create a note."}
-    prompt = _build_summary_prompt(tools, mcp_tools=None)
-    assert "get_current_time" in prompt
-    assert "create_note" in prompt
-    assert "Get the current time." in prompt
+def test_should_group_known_tools_into_categories() -> None:
+    tools = {
+        "get_current_time": "Get time.",
+        "create_note": "Create a note.",
+        "search": "Search web.",
+    }
+    categorized = _categorize_tools(tools, mcp_tools=None)
+    assert "🕐 Time" in categorized
+    assert "📝 Notes" in categorized
+    assert "🔍 Research" in categorized
+    assert any(name == "get_current_time" for name, _ in categorized["🕐 Time"])
 
 
-def test_should_sort_python_tools_alphabetically_in_prompt() -> None:
-    tools = {"zzz_tool": "Last.", "aaa_tool": "First."}
-    prompt = _build_summary_prompt(tools, mcp_tools=None)
-    assert prompt.index("aaa_tool") < prompt.index("zzz_tool")
+def test_should_place_unknown_tools_in_other() -> None:
+    tools = {"mystery_tool": "Unknown."}
+    categorized = _categorize_tools(tools, mcp_tools=None)
+    assert "📦 Other" in categorized
+    assert any(name == "mystery_tool" for name, _ in categorized["📦 Other"])
 
 
-def test_should_include_mcp_tools_when_available() -> None:
+def test_should_include_mcp_tools_in_memory_category() -> None:
     mcp: list[_McpTool] = [
         _McpTool(name="store_memory", description="Store a memory."),
-        _McpTool(name="recall_memory", description="Recall memories."),
     ]
-    prompt = _build_summary_prompt({}, mcp_tools=mcp)
-    assert "store_memory" in prompt
-    assert "recall_memory" in prompt
-    assert "memory/MCP" in prompt
+    categorized = _categorize_tools({}, mcp_tools=mcp)
+    assert "🧠 Memory" in categorized
+    assert any(name == "store_memory" for name, _ in categorized["🧠 Memory"])
 
 
-def test_should_note_mcp_unavailable_when_none() -> None:
-    prompt = _build_summary_prompt({"a_tool": "Does a thing."}, mcp_tools=None)
-    assert "unavailable" in prompt.lower()
-
-
-def test_should_use_placeholder_for_tool_with_no_description() -> None:
-    prompt = _build_summary_prompt({"silent_tool": ""}, mcp_tools=None)
-    assert "(no description)" in prompt
+def test_should_show_mcp_unavailable_when_none() -> None:
+    categorized = _categorize_tools({}, mcp_tools=None)
+    assert "🧠 Memory" in categorized
+    assert any(name == "(unavailable)" for name, _ in categorized["🧠 Memory"])
 
 
 # ---------------------------------------------------------------------------
-# _build_fallback_html
+# _build_category_detail_markdown
 # ---------------------------------------------------------------------------
 
 
-def test_should_list_all_python_tool_names_in_fallback_html() -> None:
-    tools = {"create_note": "Create a note.", "delete_note": "Delete a note."}
-    html = _build_fallback_html(tools, mcp_tools=None)
-    assert "<code>create_note</code>" in html
-    assert "<code>delete_note</code>" in html
+def test_should_render_tools_in_category_with_descriptions() -> None:
+    tools = [
+        ("get_current_time", "Get the current server time."),
+        ("search", "Search the web."),
+    ]
+    markdown = _build_category_detail_markdown("🕐 Time", tools)
+    assert "**🕐 Time**" in markdown
+    assert "`get_current_time`" in markdown
+    assert "Get the current server time." in markdown
 
 
-def test_should_show_mcp_unavailable_message_when_none() -> None:
-    html = _build_fallback_html({}, mcp_tools=None)
-    assert "MCP server did not respond" in html
+def test_should_truncate_long_descriptions() -> None:
+    long_desc = "x" * 200
+    tools = [("slow_tool", long_desc)]
+    markdown = _build_category_detail_markdown("📦 Other", tools)
+    assert "…" in markdown
+    assert len(markdown) < len(long_desc) + 100
 
 
-def test_should_list_mcp_tools_when_available() -> None:
-    mcp: list[_McpTool] = [_McpTool(name="store_memory", description="")]
-    html = _build_fallback_html({}, mcp_tools=mcp)
-    assert "<code>store_memory</code>" in html
-    assert "MCP server did not respond" not in html
+def test_should_preserve_html_in_tool_names_in_markdown() -> None:
+    tools = [("tool<a>", "Does a thing.")]
+    markdown = _build_category_detail_markdown("📦 Other", tools)
+    assert "`tool<a>`" in markdown
 
 
-def test_should_escape_html_special_chars_in_tool_name() -> None:
-    # Synthetic name with HTML-unsafe characters — ensures html.escape is called.
-    mcp: list[_McpTool] = [_McpTool(name="tool<a>&b", description="")]
-    html_output = _build_fallback_html({}, mcp_tools=mcp)
-    assert "<a>" not in html_output
-    assert "tool&lt;a&gt;&amp;b" in html_output
+# ---------------------------------------------------------------------------
+# _build_all_tools_markdown
+# ---------------------------------------------------------------------------
+
+
+def test_should_split_into_chunks_when_text_exceeds_limit() -> None:
+    # Create many tools with very long descriptions to force chunking
+    tools = {f"tool_{i}": "Description line one. Line two. Line three." * 100 for i in range(30)}
+    categorized = _categorize_tools(tools, mcp_tools=None)
+    chunks = _build_all_tools_markdown(categorized)
+    assert len(chunks) > 1
+    for chunk in chunks:
+        assert len(chunk) <= 3_800
+
+
+def test_should_include_all_categories_in_chunks() -> None:
+    tools = {"get_current_time": "Get time.", "create_note": "Create."}
+    categorized = _categorize_tools(tools, mcp_tools=None)
+    chunks = _build_all_tools_markdown(categorized)
+    full_text = "\n".join(chunks)
+    assert "🕐 Time" in full_text
+    assert "📝 Notes" in full_text
+    assert "`get_current_time`" in full_text
 
 
 # ---------------------------------------------------------------------------

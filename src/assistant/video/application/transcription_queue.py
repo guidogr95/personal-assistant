@@ -198,10 +198,12 @@ async def _process_job(job: TranscriptionJob) -> None:
             note_filename=note.filename,
             service=metadata.service_used,
         )
-        await bot.send_message(
+        from assistant.telegram.formatting import send_message
+
+        await send_message(
+            bot,
+            f"✅ Transcript ready: `{note.filename}`",
             chat_id=job.user_id,
-            text=f"✅ Transcript ready: `{note.filename}`",
-            parse_mode="MarkdownV2",
         )
     except Exception as exc:  # noqa: BLE001 — worker must not crash; all errors reported to user
         job.status = JobStatus.FAILED
@@ -215,9 +217,12 @@ async def _process_job(job: TranscriptionJob) -> None:
             error=str(exc),
         )
         try:
-            await bot.send_message(
+            from assistant.telegram.formatting import send_message
+
+            await send_message(
+                bot,
+                f"❌ Transcription failed: {exc}",
                 chat_id=job.user_id,
-                text=f"❌ Transcription failed: {exc}",
             )
         except Exception as notify_exc:
             logger.error(

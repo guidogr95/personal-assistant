@@ -9,36 +9,36 @@ from assistant.agent.domain.agent import agent
 from assistant.conversation.application import close_session, list_sessions, open_session
 from assistant.conversation.domain.repositories import SessionRepository, TurnRepository
 from assistant.shared.exceptions import NoActiveSessionError
-from assistant.telegram.formatting import answer_markdown, bold
+from assistant.telegram.formatting import bold, send_message
 from assistant.telegram.keyboards import build_sessions_keyboard
 
 logger = structlog.get_logger()
 
 router = Router()
 
-_HELP_TEXT = """<b>Available commands</b>
+_HELP_TEXT = """**Available commands**
 
-<b>Session management</b>
-<code>/new</code> — start a fresh session (closes the active one)
-<code>/close</code> — close the active session and generate a title
-<code>/sessions</code> — show your 10 most recent sessions as a tappable list
+**Session management**
+`/new` — start a fresh session (closes the active one)
+`/close` — close the active session and generate a title
+`/sessions` — show your 10 most recent sessions as a tappable list
 
-<b>Check-ins</b> <i>(proactive scheduled messages)</i>
-<code>/checkin list</code> — list all scheduled check-ins
-<code>/checkin add &lt;name&gt; | &lt;cron&gt; | &lt;instructions&gt;</code> — schedule a check-in
-<code>/checkin delete &lt;name&gt;</code> — remove a check-in
-Cron example: <code>0 9 * * *</code> = every day at 09:00 UTC
+**Check-ins** *(proactive scheduled messages)*
+`/checkin list` — list all scheduled check-ins
+`/checkin add <name> | <cron> | <instructions>` — schedule a check-in
+`/checkin delete <name>` — remove a check-in
+Cron example: `0 9 * * *` = every day at 09:00 UTC
 
-<code>/help</code> — show this message
+`/help` — show this message
 
-<i>Tip: you don't need slash commands for check-ins. Just say
-"set up a daily check-in at 9am to summarise my tasks" and I'll handle it.</i>"""
+*Tip: you don't need slash commands for check-ins. Just say
+"set up a daily check-in at 9am to summarise my tasks" and I'll handle it.*"""
 
 
 @router.message(Command("help"))
 async def cmd_help(message: Message) -> None:
     """List all available commands."""
-    await answer_markdown(message, _HELP_TEXT)
+    await send_message(message, _HELP_TEXT)
 
 
 @router.message(Command("new"))
@@ -73,7 +73,7 @@ async def cmd_close(
             turn_repo=turn_repo,
             agent=agent,
         )
-        await answer_markdown(message, f"Session closed: {bold(title)}")
+        await send_message(message, f"Session closed: {bold(title)}")
     except NoActiveSessionError:
         await message.answer("No active session to close.")
 

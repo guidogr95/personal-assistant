@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import html
 import json
 from typing import TypedDict
 
@@ -12,22 +11,20 @@ from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
 
-from assistant.agent.domain.agent import agent
 from assistant.shared.config import settings
 from assistant.shared.time import get_current_time
-from assistant.telegram.formatting import answer_markdown
+from assistant.telegram.formatting import send_message
+from assistant.telegram.keyboards import (
+    _TOOL_CATEGORIES,
+    build_tool_categories_keyboard,
+)
 
 logger = structlog.get_logger()
 
 router = Router()
 
-_SUMMARISE_INSTRUCTIONS = (
-    "You are summarising the tools available to an AI assistant. "
-    "Group them by functional domain and provide a clear one-sentence explanation for each tool. "
-    "Format the output as Telegram HTML: use <b>Group Name</b> for group headings and "
-    "<code>tool_name</code> for tool names. "
-    "Do not invoke any tools — only produce the formatted summary text."
-)
+# Maximum length for a single Telegram text message (safety margin below 4096).
+_MAX_TELEGRAM_MESSAGE_LENGTH: int = 3_800
 
 
 class _McpTool(TypedDict):
@@ -87,84 +84,105 @@ async def _fetch_mcp_tools() -> list[_McpTool] | None:
         return None
 
 
-def _build_summary_prompt(python_tools: dict[str, str], mcp_tools: list[_McpTool] | None) -> str:
-    """Build the prompt sent to the LLM to produce a grouped tool summary.
+def _categorize_tools(
+    python_tools: dict[str, str],
+    mcp_tools: list[_McpTool] | None,
+) -> dict[str, list[tuple[str, str]]]:
+    """Group Python and MCP tools by category.
 
-    Args:
-        python_tools: Mapping of tool name to description for Python-registered tools.
-        mcp_tools: List of MCP tool dicts, or ``None`` if the server is unreachable.
-
-    Returns:
-        Plain-text prompt string ready for ``agent.run()``.
+    Returns a dict mapping category display name to a list of (tool_name, description).
+    Tools not matching any known category go into "📦 Other".
     """
-    lines: list[str] = ["Available tools with their descriptions:", ""]
+    categorized: dict[str, list[tuple[str, str]]] = {cat: [] for cat in _TOOL_CATEGORIES}
+    categorized["📦 Other"] = []
+    categorized["🧠 Memory"] = []
+
+    # Invert the mapping for O(1) lookup
+    name_to_category: dict[str, str] = {}
+    for cat, names in _TOOL_CATEGORIES.items():
+        for name in names:
+            name_to_category[name] = cat
+
     for name, desc in sorted(python_tools.items()):
-        lines.append(f"- {name}: {desc or '(no description)'}")
+        cat = name_to_category.get(name, "📦 Other")
+        categorized[cat].append((name, desc))
+
     if mcp_tools is not None:
         for tool in mcp_tools:
-            desc = tool["description"] or "(no description)"
-            lines.append(f"- {tool['name']} (memory/MCP): {desc}")
+            categorized["🧠 Memory"].append((tool["name"], tool["description"]))
     else:
-        lines.append("(Memory/MCP tools are currently unavailable)")
-    lines += [
-        "",
-        "Group these tools by functional domain and provide a clear one-sentence explanation "
-        "for each. Use Telegram HTML formatting as instructed.",
-    ]
-    return "\n".join(lines)
+        categorized["🧠 Memory"] = [("(unavailable)", "MCP server did not respond")]
+
+    # Remove empty categories
+    return {k: v for k, v in categorized.items() if v}
 
 
-def _build_fallback_html(python_tools: dict[str, str], mcp_tools: list[_McpTool] | None) -> str:
-    """Plain HTML listing used when AI summarisation fails.
+def _build_category_detail_markdown(
+    category_name: str,
+    tools: list[tuple[str, str]],
+) -> str:
+    """Build Markdown for a single category's tool listing.
 
-    Args:
-        python_tools: Mapping of tool name to description.
-        mcp_tools: List of MCP tool dicts, or ``None`` if unreachable.
-
-    Returns:
-        HTML-formatted string listing tools grouped by source.
+    Each tool is shown as `` `name` — one-line description ``.
     """
-    lines: list[str] = ["<b>Available tools</b>\n", "<b>Built-in</b>"]
-    for name in sorted(python_tools):
-        lines.append(f"  <code>{html.escape(name)}</code>")
-    lines.append("")
-    if mcp_tools is not None:
-        lines.append("<b>Memory (MCP)</b>")
-        for tool in mcp_tools:
-            lines.append(f"  <code>{html.escape(tool['name'])}</code>")
-    else:
-        lines.append("<i>Memory tools: MCP server did not respond</i>")
+    lines: list[str] = [f"**{category_name}**", ""]
+    for name, desc in tools:
+        short_desc = (desc or "(no description)").split("\n")[0].strip()
+        if len(short_desc) > 120:
+            short_desc = short_desc[:117] + "…"
+        lines.append(f"`{name}` — {short_desc}")
     return "\n".join(lines)
+
+
+def _build_all_tools_markdown(
+    categorized: dict[str, list[tuple[str, str]]],
+) -> list[str]:
+    """Build a compact Markdown listing of all tools, split into message-sized chunks.
+
+    Returns a list of Markdown strings, each under the Telegram message length limit.
+    """
+    chunks: list[str] = []
+    current_lines: list[str] = ["**🛠️ All Assistant Tools**", ""]
+    current_length: int = len(current_lines[0]) + len(current_lines[1])
+
+    for category_name, tools in categorized.items():
+        category_header = f"**{category_name}**"
+        category_lines: list[str] = [category_header]
+        for name, desc in tools:
+            short_desc = (desc or "(no description)").split("\n")[0].strip()
+            if len(short_desc) > 120:
+                short_desc = short_desc[:117] + "…"
+            category_lines.append(f"  `{name}` — {short_desc}")
+        category_lines.append("")
+
+        category_text = "\n".join(category_lines)
+        if current_length + len(category_text) > _MAX_TELEGRAM_MESSAGE_LENGTH and current_lines:
+            chunks.append("\n".join(current_lines).rstrip())
+            current_lines = [category_header]
+            current_length = len(category_header)
+        else:
+            current_lines.extend(category_lines)
+            current_length += len(category_text)
+
+    if current_lines:
+        chunks.append("\n".join(current_lines).rstrip())
+
+    return chunks
 
 
 @router.message(Command("tools"))
 async def cmd_tools(message: Message) -> None:
-    """List all agent tools with AI-generated grouped explanations.
+    """Show a category browser for all agent tools.
 
-    Collects Python-registered tools and their docstring descriptions directly
-    from the agent registry, fetches MCP tool metadata live from the memory
-    service, then asks the LLM to group and explain all tools.  Falls back to
-    a plain name listing if the LLM call fails.
+    Presents an inline keyboard where each button selects a functional domain.
+    Tapping a category shows the tools in that domain with compact descriptions.
+    A "📋 Show All" button sends a compact text listing of every tool.
     """
-    try:
-        python_tools: dict[str, str] = {
-            name: (tool.description or "") for name, tool in agent._function_toolset.tools.items()
-        }
-    except AttributeError:
-        logger.warning("agent_function_tools_unavailable")
-        python_tools = {}
-
-    mcp_tools = await _fetch_mcp_tools()
-    prompt = _build_summary_prompt(python_tools, mcp_tools)
-
-    try:
-        run_result = await agent.run(prompt, instructions=_SUMMARISE_INSTRUCTIONS)
-        text = run_result.output
-    except Exception as exc:
-        logger.warning("tools_summary_llm_failed", error=str(exc))
-        text = _build_fallback_html(python_tools, mcp_tools)
-
-    await answer_markdown(message, text)
+    await send_message(
+        message,
+        "**🛠️ Assistant Tools**\n\nTap a category to see the tools inside it:",
+        reply_markup=build_tool_categories_keyboard(),
+    )
 
 
 @router.message(Command("time"))

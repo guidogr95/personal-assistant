@@ -10,7 +10,7 @@ from assistant.conversation.application.open_session import open_session_for_use
 from assistant.conversation.domain.repositories import SessionRepository, TurnRepository
 from assistant.prompts.domain.prompt_repository import PromptRepository
 from assistant.shared.exceptions import NoActiveSessionError
-from assistant.telegram.formatting import answer_markdown, bold
+from assistant.telegram.formatting import bold, send_message
 from assistant.telegram.keyboards import build_delete_confirmation_keyboard
 from assistant.telegram.pending_state import pending_deletions
 
@@ -57,7 +57,7 @@ async def on_message(
     if reply.startswith(delete_prefix):
         filename = reply[len(delete_prefix) :]
         pending_deletions[message.from_user.id] = filename
-        await answer_markdown(
+        await send_message(
             message,
             f"Delete {bold(filename)}? This cannot be undone.",
             reply_markup=build_delete_confirmation_keyboard(),
@@ -65,7 +65,7 @@ async def on_message(
         return
 
     try:
-        await answer_markdown(message, reply)
+        await send_message(message, reply)
     except Exception:
         logger.warning("markdown_parse_failed_falling_back_to_plain_text")
         await message.answer(reply)

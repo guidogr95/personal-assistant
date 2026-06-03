@@ -5,7 +5,7 @@ from aiogram import Bot
 
 from assistant.scheduler.domain.repositories import ScheduledCheckInRepository
 from assistant.shared.config import settings
-from assistant.telegram.formatting import bold, send_markdown
+from assistant.telegram.formatting import bold, send_message
 
 logger = structlog.get_logger()
 
@@ -69,9 +69,8 @@ async def run_checkin(checkin_id: str) -> None:
             text = f"📋 {bold(checkin.name)}\n\n(no message or instructions)"
 
         try:
-            await send_markdown(bot, chat_id, text)
+            await send_message(bot, text, chat_id=chat_id)
         except Exception:
-            # Fallback to plain text if MarkdownV2 parse fails
             logger.warning("checkin_markdown_failed_falling_back", checkin_id=checkin_id)
             await bot.send_message(chat_id=chat_id, text=text)
 
@@ -86,7 +85,7 @@ async def run_checkin(checkin_id: str) -> None:
                 f"✅ Check-in {bold(checkin.name)} completed after {checkin.max_runs} run(s)."
             )
             try:
-                await send_markdown(bot, chat_id, done_text)
+                await send_message(bot, done_text, chat_id=chat_id)
             except Exception:
                 await bot.send_message(chat_id=chat_id, text=done_text)
             logger.info("checkin_auto_disabled", checkin_id=checkin_id, name=checkin.name)
@@ -97,6 +96,6 @@ async def run_checkin(checkin_id: str) -> None:
         logger.error("checkin_failed", checkin_id=checkin_id, name=checkin.name, error=str(exc))
         try:
             fail_text = f"⚠️ Check-in {bold(checkin.name)} failed. See logs for details."
-            await send_markdown(bot, chat_id, fail_text)
+            await send_message(bot, fail_text, chat_id=chat_id)
         except Exception as notify_exc:
             logger.error("checkin_notify_failed", checkin_id=checkin_id, error=str(notify_exc))
