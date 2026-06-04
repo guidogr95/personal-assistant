@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+
 import structlog
 from aiogram import Bot
 
@@ -13,21 +15,32 @@ logger = structlog.get_logger()
 # Acceptable for a single-process, single-scheduler personal assistant bot.
 _bot: Bot | None = None
 _checkin_repo: ScheduledCheckInRepository | None = None
+_run_agent: Callable[[str], Awaitable[str]] | None = None
 
 
 def configure_checkin_runner(
     *,
     bot: Bot,
     checkin_repo: ScheduledCheckInRepository,
+    run_agent: Callable[[str], Awaitable[str]],
 ) -> None:
     """Inject runtime dependencies before the scheduler starts.
 
     Must be called exactly once during application startup, before
     scheduler.start() is called.
+
+    Args:
+        bot: Telegram Bot instance for sending messages.
+        checkin_repo: Repository for check-in persistence.
+        run_agent: Callback that runs the agent with given instructions.
+            Signature: ``async def run_agent(instructions: str) -> str``.
+            This callback breaks the circular dependency between the
+            scheduler and the agent domain.
     """
-    global _bot, _checkin_repo
+    global _bot, _checkin_repo, _run_agent
     _bot = bot
     _checkin_repo = checkin_repo
+    _run_agent = run_agent
 
 
 async def run_checkin(checkin_id: str) -> None:
@@ -40,7 +53,8 @@ async def run_checkin(checkin_id: str) -> None:
     """
     bot = _bot
     checkin_repo = _checkin_repo
-    if bot is None or checkin_repo is None:
+    run_agent = _run_agent
+    if bot is None or checkin_repo is None or run_agent is None:
         raise RuntimeError("configure_checkin_runner must be called before the scheduler starts")
 
     checkin = await checkin_repo.get_by_id(checkin_id)
@@ -60,11 +74,10 @@ async def run_checkin(checkin_id: str) -> None:
             # Direct-message reminder (no LLM cost)
             text = f"🔔 {bold(checkin.name)}\n\n{checkin.message}"
         elif checkin.instructions:
-            # Agent-run check-in
-            from assistant.agent.domain.agent import agent  # noqa: PLC0415
-
-            result = await agent.run(checkin.instructions)
-            text = f"📋 {bold(checkin.name)}\n\n{result.output}"
+            # Agent-run check-in — uses the injected callback to avoid
+            # circular dependency (scheduler → agent → scheduler tools).
+            result = await run_agent(checkin.instructions)
+            text = f"📋 {bold(checkin.name)}\n\n{result}"
         else:
             text = f"📋 {bold(checkin.name)}\n\n(no message or instructions)"
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import structlog
 from aiogram import Router
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import BotCommand, Message
 
 from assistant.prompts.application.get_system_prompt import get_system_prompt
 from assistant.prompts.application.update_system_prompt import update_system_prompt
@@ -15,6 +15,10 @@ from assistant.telegram.formatting import bold, pre, send_message
 logger = structlog.get_logger()
 
 router = Router()
+
+COMMANDS = [
+    BotCommand(command="system", description="Show or update system prompt"),
+]
 
 _MAX_TELEGRAM_MESSAGE_LENGTH = 4000
 

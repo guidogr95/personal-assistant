@@ -1,0 +1,48 @@
+{
+  "name": "visual-explainer",
+  "version": "0.7.1",
+  "description": "Agent skill that generates beautiful HTML pages for diagrams, diff reviews, plan reviews, slide decks, and data tables",
+  "license": "MIT",
+  "homepage": "https://github.com/nicobailon/visual-explainer#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nicobailon/visual-explainer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nicobailon/visual-explainer/issues"
+  },
+  "keywords": [
+    "agent-skill",
+    "pi-package",
+    "claude-code-plugin",
+    "claude-marketplace",
+    "codex",
+    "opencode",
+    "openclaw",
+    "cursor",
+    "diagrams",
+    "html",
+    "visualization",
+    "diff-review",
+    "plan-review",
+    "slides",
+    "mermaid"
+  ],
+  "files": [
+    "plugins/visual-explainer",
+    ".claude-plugin",
+    "configs",
+    "install-pi.sh",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "pi": {
+    "skills": [
+      "./plugins/visual-explainer"
+    ],
+    "prompts": [
+      "./plugins/visual-explainer/commands"
+    ]
+  }
+}

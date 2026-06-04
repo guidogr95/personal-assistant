@@ -7,7 +7,7 @@ import re
 import structlog
 from aiogram import Router
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import BotCommand, Message
 
 from assistant.shared.config import settings
 from assistant.video.application.extract_video_transcript import detect_platform
@@ -16,6 +16,10 @@ from assistant.video.application.transcription_queue import enqueue
 logger = structlog.get_logger()
 
 router = Router()
+
+COMMANDS = [
+    BotCommand(command="transcribe", description="Transcribe a video URL"),
+]
 
 _URL_PATTERN = re.compile(r"https?://\S+")
 

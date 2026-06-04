@@ -1,0 +1,1235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Telegram Assistant — Architecture & Mental Model</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    look: 'classic',
+    themeVariables: {
+      fontFamily: "'IBM Plex Sans', system-ui, sans-serif",
+      fontSize: '15px',
+      primaryColor: isDark ? '#2a1f1a' : '#faf0e8',
+      primaryBorderColor: isDark ? '#c2410c' : '#c2410c',
+      primaryTextColor: isDark ? '#ede5dd' : '#292017',
+      secondaryColor: isDark ? '#1f2a1a' : '#e8f5e0',
+      secondaryBorderColor: isDark ? '#65a30d' : '#4d7c0f',
+      secondaryTextColor: isDark ? '#ede5dd' : '#292017',
+      tertiaryColor: isDark ? '#2a2215' : '#fef3c7',
+      tertiaryBorderColor: isDark ? '#d97706' : '#b45309',
+      tertiaryTextColor: isDark ? '#ede5dd' : '#292017',
+      lineColor: isDark ? '#8a7e72' : '#a89b8c',
+      fontSize: '15px',
+      noteBkgColor: isDark ? '#231d1a' : '#ffffff',
+      noteTextColor: isDark ? '#ede5dd' : '#292017',
+      noteBorderColor: isDark ? '#fb923c' : '#c2410c',
+    }
+  });
+</script>
+<style>
+  /* ============ THEME ============ */
+  :root {
+    --font-body: 'IBM Plex Sans', system-ui, sans-serif;
+    --font-mono: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+
+    /* Paper/ink — warm cream, terracotta + sage */
+    --bg: #faf7f5;
+    --surface: #ffffff;
+    --surface2: #f5f0ec;
+    --surface-elevated: #fff9f5;
+    --border: rgba(0, 0, 0, 0.07);
+    --border-bright: rgba(0, 0, 0, 0.14);
+    --text: #292017;
+    --text-dim: #8a7e72;
+    --accent: #c2410c;
+    --accent-dim: rgba(194, 65, 12, 0.07);
+    --green: #4d7c0f;
+    --green-dim: rgba(77, 124, 15, 0.07);
+    --orange: #b45309;
+    --orange-dim: rgba(180, 83, 9, 0.07);
+    --sage: #65a30d;
+    --sage-dim: rgba(101, 163, 13, 0.07);
+    --teal: #0f766e;
+    --teal-dim: rgba(15, 118, 110, 0.07);
+    --plum: #9f1239;
+    --plum-dim: rgba(159, 18, 57, 0.07);
+    --amber: #d97706;
+    --amber-dim: rgba(217, 119, 6, 0.07);
+  }
+
+  [data-theme="dark"] {
+    --bg: #1a1412;
+    --surface: #231d1a;
+    --surface2: #2e2622;
+    --surface-elevated: #352d28;
+    --border: rgba(255, 255, 255, 0.06);
+    --border-bright: rgba(255, 255, 255, 0.12);
+    --text: #ede5dd;
+    --text-dim: #a69889;
+    --accent: #fb923c;
+    --accent-dim: rgba(251, 146, 60, 0.12);
+    --green: #a3e635;
+    --green-dim: rgba(163, 230, 53, 0.1);
+    --orange: #fbbf24;
+    --orange-dim: rgba(251, 191, 36, 0.1);
+    --sage: #bef264;
+    --sage-dim: rgba(190, 242, 100, 0.1);
+    --teal: #5eead4;
+    --teal-dim: rgba(94, 234, 212, 0.1);
+    --plum: #fda4af;
+    --plum-dim: rgba(253, 164, 175, 0.1);
+    --amber: #fbbf24;
+    --amber-dim: rgba(251, 191, 36, 0.1);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1a1412;
+      --surface: #231d1a;
+      --surface2: #2e2622;
+      --surface-elevated: #352d28;
+      --border: rgba(255, 255, 255, 0.06);
+      --border-bright: rgba(255, 255, 255, 0.12);
+      --text: #ede5dd;
+      --text-dim: #a69889;
+      --accent: #fb923c;
+      --accent-dim: rgba(251, 146, 60, 0.12);
+      --green: #a3e635;
+      --green-dim: rgba(163, 230, 53, 0.1);
+      --orange: #fbbf24;
+      --orange-dim: rgba(251, 191, 36, 0.1);
+      --sage: #bef264;
+      --sage-dim: rgba(190, 242, 100, 0.1);
+      --teal: #5eead4;
+      --teal-dim: rgba(94, 234, 212, 0.1);
+      --plum: #fda4af;
+      --plum-dim: rgba(253, 164, 175, 0.1);
+      --amber: #fbbf24;
+      --amber-dim: rgba(251, 191, 36, 0.1);
+    }
+  }
+
+  /* ============ RESET + BASE ============ */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    background-image:
+      radial-gradient(ellipse at 20% 0%, var(--accent-dim) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 100%, var(--sage-dim) 0%, transparent 40%);
+    color: var(--text);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    line-height: 1.6;
+  }
+
+  /* ============ ANIMATION ============ */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .animate {
+    animation: fadeUp 0.5s ease-out both;
+    animation-delay: calc(var(--i, 0) * 0.08s);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-delay: 0ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  /* ============ THEME TOGGLE ============ */
+  .theme-toggle {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 1000;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .theme-toggle:hover {
+    background: var(--surface-elevated);
+    color: var(--text);
+  }
+
+  /* ============ SIDEBAR TOC ============ */
+  .layout {
+    display: flex;
+    max-width: 1400px;
+    margin: 0 auto;
+    min-height: 100vh;
+  }
+
+  .sidebar {
+    width: 260px;
+    padding: 40px 24px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .sidebar-title {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+    margin-bottom: 20px;
+  }
+
+  .sidebar ul {
+    list-style: none;
+  }
+
+  .sidebar li {
+    margin-bottom: 4px;
+  }
+
+  .sidebar a {
+    display: block;
+    padding: 6px 10px;
+    border-radius: 6px;
+    color: var(--text-dim);
+    text-decoration: none;
+    font-size: 13px;
+    transition: all 0.15s ease;
+    overflow-wrap: break-word;
+    min-width: 0;
+  }
+
+  .sidebar a:hover {
+    background: var(--surface);
+    color: var(--text);
+  }
+
+  .sidebar a.active {
+    background: var(--accent-dim);
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  /* ============ MAIN CONTENT ============ */
+  .main {
+    flex: 1;
+    padding: 40px 48px;
+    min-width: 0;
+  }
+
+  @media (max-width: 900px) {
+    .layout { flex-direction: column; }
+    .sidebar {
+      width: 100%;
+      height: auto;
+      position: relative;
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+      padding: 16px;
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+    .sidebar-title { display: none; }
+    .sidebar ul { display: flex; gap: 4px; }
+    .sidebar li { margin: 0; }
+    .sidebar a { white-space: nowrap; padding: 6px 12px; }
+    .main { padding: 24px 16px; }
+  }
+
+  /* ============ TYPOGRAPHY ============ */
+  h1 {
+    font-size: 42px;
+    font-weight: 700;
+    letter-spacing: -1.5px;
+    margin-bottom: 8px;
+    line-height: 1.15;
+  }
+
+  h2 {
+    font-size: 26px;
+    font-weight: 600;
+    margin: 48px 0 20px;
+    letter-spacing: -0.5px;
+    scroll-margin-top: 24px;
+  }
+
+  h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 32px 0 12px;
+  }
+
+  p {
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--text-dim);
+    margin-bottom: 16px;
+    max-width: 720px;
+  }
+
+  p strong { color: var(--text); }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    background: var(--surface2);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: var(--accent);
+  }
+
+  pre {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.5;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    overflow-x: auto;
+    white-space: pre;
+    word-break: break-word;
+    margin: 16px 0;
+    color: var(--text);
+  }
+
+  pre code {
+    background: transparent;
+    padding: 0;
+    color: inherit;
+  }
+
+  /* ============ HERO CARD ============ */
+  .hero {
+    background: var(--surface-elevated);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 36px 40px;
+    margin-bottom: 40px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--accent), var(--sage));
+  }
+
+  .hero-badges {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 20px;
+  }
+
+  .badge {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    padding: 5px 12px;
+    border-radius: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+
+  .badge--accent {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .badge--green {
+    background: var(--green-dim);
+    border-color: var(--green);
+    color: var(--green);
+  }
+
+  .badge--sage {
+    background: var(--sage-dim);
+    border-color: var(--sage);
+    color: var(--sage);
+  }
+
+  .hero-elevator {
+    font-size: 17px;
+    line-height: 1.6;
+    color: var(--text-dim);
+    margin-top: 12px;
+    font-style: italic;
+  }
+
+  /* ============ MERMAID ============ */
+  .mermaid-wrap {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px 24px;
+    overflow: auto;
+    margin: 24px 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 300px;
+  }
+
+  .mermaid {
+    display: flex;
+    justify-content: center;
+  }
+
+  .mermaid .nodeLabel {
+    font-family: var(--font-body) !important;
+    font-size: 14px !important;
+  }
+
+  .mermaid .edgeLabel {
+    font-family: var(--font-mono) !important;
+    font-size: 12px !important;
+  }
+
+  .mermaid .node rect,
+  .mermaid .node circle,
+  .mermaid .node polygon {
+    stroke-width: 1.5px !important;
+  }
+
+  .mermaid .edge-pattern-solid {
+    stroke-width: 1.5px !important;
+  }
+
+  /* ============ MODULE GRID ============ */
+  .module-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 20px;
+    margin: 24px 0;
+  }
+
+  .ve-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    position: relative;
+    overflow-wrap: break-word;
+    min-width: 0;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .ve-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  }
+
+  .ve-card--accent { border-left: 3px solid var(--accent); }
+  .ve-card--green { border-left: 3px solid var(--green); }
+  .ve-card--sage { border-left: 3px solid var(--sage); }
+  .ve-card--teal { border-left: 3px solid var(--teal); }
+  .ve-card--plum { border-left: 3px solid var(--plum); }
+  .ve-card--orange { border-left: 3px solid var(--orange); }
+  .ve-card--amber { border-left: 3px solid var(--amber); }
+
+  .ve-card__label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-dim);
+  }
+
+  .ve-card__label::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .ve-card--accent .ve-card__label { color: var(--accent); }
+  .ve-card--accent .ve-card__label::before { background: var(--accent); }
+  .ve-card--green .ve-card__label { color: var(--green); }
+  .ve-card--green .ve-card__label::before { background: var(--green); }
+  .ve-card--sage .ve-card__label { color: var(--sage); }
+  .ve-card--sage .ve-card__label::before { background: var(--sage); }
+  .ve-card--teal .ve-card__label { color: var(--teal); }
+  .ve-card--teal .ve-card__label::before { background: var(--teal); }
+  .ve-card--plum .ve-card__label { color: var(--plum); }
+  .ve-card--plum .ve-card__label::before { background: var(--plum); }
+  .ve-card--orange .ve-card__label { color: var(--orange); }
+  .ve-card--orange .ve-card__label::before { background: var(--orange); }
+  .ve-card--amber .ve-card__label { color: var(--amber); }
+  .ve-card--amber .ve-card__label::before { background: var(--amber); }
+
+  .ve-card h4 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+
+  .ve-card p {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+
+  .ve-card .files {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+
+  .ve-card .gotcha {
+    font-size: 12px;
+    color: var(--accent);
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: var(--accent-dim);
+    border-radius: 6px;
+  }
+
+  /* ============ CALLOUT ============ */
+  .callout {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 10px 10px 0;
+    padding: 16px 20px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-dim);
+    margin: 20px 0;
+  }
+
+  .callout strong { color: var(--text); }
+
+  .callout--green { border-left-color: var(--green); }
+  .callout--sage { border-left-color: var(--sage); }
+  .callout--amber { border-left-color: var(--amber); }
+  .callout--plum { border-left-color: var(--plum); }
+
+  /* ============ CONCEPT LIST ============ */
+  .concept-list {
+    counter-reset: concept;
+    list-style: none;
+    margin: 20px 0;
+  }
+
+  .concept-list li {
+    position: relative;
+    padding-left: 44px;
+    margin-bottom: 20px;
+    min-height: 32px;
+  }
+
+  .concept-list li::before {
+    counter-increment: concept;
+    content: counter(concept);
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 28px;
+    height: 28px;
+    background: var(--accent);
+    color: #fff;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .concept-list li strong {
+    display: block;
+    color: var(--text);
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .concept-list li span {
+    font-size: 14px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  .concept-list li.gotcha::before {
+    background: var(--amber);
+  }
+
+  /* ============ LEGEND ============ */
+  .legend {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin: 16px 0;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .legend-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+  }
+
+  /* ============ RESPONSIVE ============ */
+  @media (max-width: 600px) {
+    h1 { font-size: 28px; }
+    h2 { font-size: 20px; }
+    .hero { padding: 24px; }
+    .module-grid { grid-template-columns: 1fr; }
+    .theme-toggle { top: 8px; right: 8px; padding: 6px 10px; font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+
+<button class="theme-toggle" onclick="toggleTheme()">🌙 / ☀️</button>
+
+<div class="layout">
+
+<nav class="sidebar">
+  <div class="sidebar-title">On this page</div>
+  <ul>
+    <li><a href="#identity" class="active">Project Identity</a></li>
+    <li><a href="#architecture">Architecture</a></li>
+    <li><a href="#dataflow">Data Flow</a></li>
+    <li><a href="#modules">Modules</a></li>
+    <li><a href="#concepts">Key Concepts</a></li>
+    <li><a href="#extensibility">Extensibility</a></li>
+    <li><a href="#getting-started">Getting Started</a></li>
+  </ul>
+</nav>
+
+<main class="main">
+
+<!-- ==================== PROJECT IDENTITY ==================== -->
+<section id="identity" class="animate" style="--i:0">
+  <div class="hero">
+    <h1>Telegram Assistant</h1>
+    <p class="hero-elevator">
+      A self-hosted, containerized AI personal assistant that lives in Telegram.
+      It remembers conversations, manages tasks, transcribes videos, and proactively
+      checks in — all running on a single 2GB VPS.
+    </p>
+    <div class="hero-badges">
+      <span class="badge badge--accent">v0.1.0</span>
+      <span class="badge badge--green">Python 3.12</span>
+      <span class="badge badge--sage">MVP + Active Dev</span>
+      <span class="badge">Docker Compose</span>
+      <span class="badge">2GB RAM</span>
+      <span class="badge">Single-User</span>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== ARCHITECTURE DIAGRAM ==================== -->
+<section id="architecture" class="animate" style="--i:1">
+  <h2>Architecture</h2>
+  <p>
+    Seven Docker containers on a single bridge network. The bot is the orchestrator —
+    everything else is a sidecar. No external load balancer, no Kubernetes, no cloud
+    dependencies beyond the LLM API.
+  </p>
+
+  <div class="mermaid-wrap">
+    <div class="mermaid">
+flowchart TD
+    subgraph ext["External"]
+        TG["Telegram API"]
+        LLM["OpenAI-compatible API<br/>opencode.ai"]
+    end
+
+    subgraph net["Docker Network: assistant_net"]
+        BOT["🤖 Bot<br/>aiogram + pydantic-ai<br/>Port: HTTP polling"]
+        MEM["🧠 Memory<br/>MCP HTTP service<br/>Port: 8001"]
+        SRCH["🔍 SearXNG<br/>Local search engine<br/>Port: 8080"]
+        VIK["✅ Vikunja<br/>Task manager<br/>Port: 3456"]
+        DB["🗄️ MariaDB<br/>Vikunja database<br/>Port: 3306"]
+        BG["🎬 bgutil<br/>YouTube PO tokens<br/>Port: 4416"]
+        SYNC["🔄 Syncthing<br/>Notes sync<br/>Port: 22000"]
+    end
+
+    TG -->|"long-polling"| BOT
+    BOT -->|"HTTP"| LLM
+    BOT -->|"MCP HTTP"| MEM
+    BOT -->|"HTTP"| SRCH
+    BOT -->|"HTTP"| VIK
+    BOT -->|"HTTP"| BG
+    VIK -->|"TCP"| DB
+    SYNC -->|"sync"| BOT
+
+    style BOT fill:#faf0e8,stroke:#c2410c,stroke-width:2px
+    style MEM fill:#e8f5e0,stroke:#4d7c0f,stroke-width:2px
+    style SRCH fill:#e0f2fe,stroke:#0f766e,stroke-width:2px
+    style VIK fill:#fef3c7,stroke:#b45309,stroke-width:2px
+    style DB fill:#fce7f3,stroke:#9f1239,stroke-width:2px
+    style BG fill:#f3e8ff,stroke:#7c3aed,stroke-width:2px
+    style SYNC fill:#f0fdf4,stroke:#059669,stroke-width:2px
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-swatch" style="background:#c2410c"></div> Bot (core)</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#4d7c0f"></div> Memory</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#0f766e"></div> Search</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#b45309"></div> Tasks</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#9f1239"></div> Database</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#7c3aed"></div> Video</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#059669"></div> Sync</div>
+  </div>
+</section>
+
+<!-- ==================== DATA FLOW ==================== -->
+<section id="dataflow" class="animate" style="--i:2">
+  <h2>Data & Component Flow</h2>
+  <p>
+    A message from the user flows through authorization, session management, LLM inference,
+    tool execution, and back to Telegram. The video transcription feature adds a background
+    worker that processes jobs asynchronously.
+  </p>
+
+  <h3>Message Handling Flow</h3>
+  <div class="mermaid-wrap">
+    <div class="mermaid">
+sequenceDiagram
+    actor U as User
+    participant TG as Telegram
+    participant M as AllowedUserMiddleware
+    participant H as message.py handler
+    participant RT as run_turn
+    participant A as pydantic-ai Agent
+    participant LLM as LLM API
+    participant T as Tools
+    participant DB as SQLite
+
+    U->>TG: Send message
+    TG->>M: HTTP POST update
+    M->>M: Check user_id == allowed
+    alt Unauthorized
+        M-->>TG: Silent drop
+    else Authorized
+        M->>H: on_message(message)
+        H->>RT: run_turn(user_id, text, repos)
+        RT->>RT: Acquire per-user Lock
+        RT->>DB: Load active Session
+        RT->>DB: Deserialize message_history_json
+        RT->>A: agent.run(text, history, prompt)
+        A->>LLM: POST /chat/completions
+        LLM-->>A: Response + tool_calls?
+        alt Tool Call
+            A->>T: Execute tool
+            T-->>A: Tool result
+            A->>LLM: Continue with result
+            LLM-->>A: Final response
+        end
+        A-->>RT: Reply text
+        RT->>DB: Save Turn(USER), Turn(ASSISTANT)
+        RT->>DB: Update Session blob
+        RT-->>H: Return reply
+        H->>TG: send_message(reply)
+        TG-->>U: Display reply
+    end
+    </div>
+  </div>
+
+  <h3>Video Transcription Flow</h3>
+  <div class="mermaid-wrap">
+    <div class="mermaid">
+flowchart TD
+    U["User sends URL"] --> DET["detect_platform()"]
+    DET -->|YouTube| YT["YouTubeTranscriptAdapter"]
+    DET -->|TikTok/IG| PLAT["YtDlpPlatformAdapter"]
+
+    YT --> CAP["Try youtube-transcript-api"]
+    CAP -->|Success| DONE["VideoMetadata<br/>captions path"]
+    CAP -->|No captions| AUD["yt-dlp extract audio"]
+
+    PLAT --> AUD2["yt-dlp extract audio"]
+    AUD --> GROQ["Groq Whisper API"]
+    AUD2 --> GROQ2["Groq Whisper API"]
+    GROQ -->|Success| DONE2["VideoMetadata<br/>Groq path"]
+    GROQ -->|Fail / >25MB| WHIS["Local Whisper tiny"]
+    GROQ2 -->|Success| DONE3["VideoMetadata<br/>Groq path"]
+    GROQ2 -->|Fail / >25MB| WHIS2["Local Whisper tiny"]
+    WHIS --> DONE4["VideoMetadata<br/>Whisper path"]
+    WHIS2 --> DONE5["VideoMetadata<br/>Whisper path"]
+
+    DONE --> FMT["format_transcript_note()"]
+    DONE2 --> FMT
+    DONE3 --> FMT
+    DONE4 --> FMT
+    DONE5 --> FMT
+    FMT --> SAVE["save_note() → Markdown vault"]
+    SAVE --> NOTIFY["bot.send_message()<br/>Proactive notification"]
+
+    style U fill:#faf0e8,stroke:#c2410c
+    style NOTIFY fill:#e8f5e0,stroke:#4d7c0f,stroke-width:2px
+    style WHIS fill:#fef3c7,stroke:#b45309
+    style WHIS2 fill:#fef3c7,stroke:#b45309
+    </div>
+  </div>
+
+  <div class="callout callout--amber">
+    <strong>Background worker.</strong> The transcription queue uses <code>asyncio.Queue</code>
+    with a single consumer. Jobs are in-memory only — lost on bot restart. This is acceptable
+    for a personal assistant but would need SQLite/Redis for multi-user or production scale.
+  </div>
+</section>
+
+<!-- ==================== MODULE BREAKDOWN ==================== -->
+<section id="modules" class="animate" style="--i:3">
+  <h2>Module Breakdown</h2>
+  <p>
+    The codebase follows DDD layering: domain (entities/VOs), application (use cases),
+    infrastructure (adapters), and presentation (Telegram handlers). Each module is
+    self-contained with its own exceptions and logging context.
+  </p>
+
+  <div class="module-grid">
+
+    <div class="ve-card ve-card--accent">
+      <div class="ve-card__label">Presentation</div>
+      <h4>Telegram Layer</h4>
+      <p>aiogram long-polling dispatcher with router-based handlers. AllowedUserMiddleware gates all updates to a single user. Markdown → Telegram HTML conversion with plain-text fallback.</p>
+      <div class="files">telegram/handlers/message.py, telegram/bot.py, telegram/formatting.py</div>
+      <div class="gotcha">⚠️ Markdown parse errors silently fall back to plain text — formatting may be lost.</div>
+    </div>
+
+    <div class="ve-card ve-card--plum">
+      <div class="ve-card__label">Agent</div>
+      <h4>LLM + Tools</h4>
+      <p>pydantic-ai Agent factory with OpenAI-compatible backend. System prompt is a single source of truth (DB on first run, 80-line inline fallback). 8 toolsets auto-discovered via <code>@tool</code> decorator. Dependencies injected through <code>RunContext[AgentDeps]</code> — zero module-level globals. MCP memory integration via HTTP.</p>
+      <div class="files">agent/domain/agent.py, agent/domain/deps.py, agent/tools/registry.py, agent/tools/</div>
+      <div class="gotcha">⚠️ Per-user asyncio.Lock serializes turns — concurrent messages wait, they don't race.</div>
+    </div>
+
+    <div class="ve-card ve-card--teal">
+      <div class="ve-card__label">Domain</div>
+      <h4>Conversation</h4>
+      <p>Session aggregate (ACTIVE/CLOSED) with Turn value objects. SQLite repositories with aiosqlite. Session stores serialized pydantic-ai message history as a JSON blob.</p>
+      <div class="files">conversation/domain/session.py, conversation/domain/turn.py, conversation/infrastructure/sqlite_repositories.py</div>
+      <div class="gotcha">⚠️ message_history_json is a serialized blob — schema changes require migration logic.</div>
+    </div>
+
+    <div class="ve-card ve-card--green">
+      <div class="ve-card__label">Feature</div>
+      <h4>Video Transcription</h4>
+      <p>YouTube (captions → audio → ASR), TikTok/Instagram (audio → ASR). FIFO queue with single worker. Groq Whisper primary, local Whisper tiny fallback. bgutil sidecar for YouTube bot detection bypass.</p>
+      <div class="files">video/application/extract_video_transcript.py, video/application/transcription_queue.py, video/infrastructure/</div>
+      <div class="gotcha">⚠️ Queue is in-memory only — jobs lost on restart. Groq has 25MB file limit.</div>
+    </div>
+
+    <div class="ve-card ve-card--sage">
+      <div class="ve-card__label">Feature</div>
+      <h4>Scheduler</h4>
+      <p>APScheduler with cron (recurring) and fire_at (one-off) checkins. Auto-disable on max_runs. Timezone-aware. All exceptions caught to prevent scheduler crash.</p>
+      <div class="files">scheduler/domain/scheduled_checkin.py, scheduler/application/run_checkin.py, scheduler/infrastructure/apscheduler_registry.py</div>
+      <div class="gotcha">⚠️ Exceptions are swallowed — errors only visible in logs, not to user.</div>
+    </div>
+
+    <div class="ve-card ve-card--orange">
+      <div class="ve-card__label">Feature</div>
+      <h4>Notes</h4>
+      <p>Markdown vault on filesystem (/srv/notes). CRUD operations with case-insensitive search. Syncthing syncs to other devices. File mtime used for timestamps.</p>
+      <div class="files">notes/domain/note.py, notes/infrastructure/markdown_repository.py</div>
+      <div class="gotcha">⚠️ Filename collisions overwrite existing files — no uniqueness enforcement.</div>
+    </div>
+
+    <div class="ve-card ve-card--amber">
+      <div class="ve-card__label">Feature</div>
+      <h4>Research</h4>
+      <p>Web search via SearXNG (local). Page fetch via Jina. Browser automation via Rebrowser Playwright. Results fed back to LLM for synthesis.</p>
+      <div class="files">research/application/search_web.py, research/infrastructure/</div>
+    </div>
+
+    <div class="ve-card ve-card--teal">
+      <div class="ve-card__label">Infrastructure</div>
+      <h4>Memory (MCP)</h4>
+      <p>MCPToolset over Streamable HTTP to mcp-memory-service. LLM calls memory_store and memory_retrieve directly. SQLite persistence with daily backups.</p>
+      <div class="files">memory/infrastructure/mcp_client.py</div>
+      <div class="gotcha">⚠️ MCP connection must be managed via async context manager — leaks on unhandled exit.</div>
+    </div>
+
+    <div class="ve-card ve-card--plum">
+      <div class="ve-card__label">Infrastructure</div>
+      <h4>Shared</h4>
+      <p>Pydantic Settings from .env. structlog with key-value structured output. UTC-aware datetimes. Custom exception hierarchy per domain.</p>
+      <div class="files">shared/config.py, shared/exceptions.py, shared/logging.py, shared/time.py</div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ==================== KEY CONCEPTS ==================== -->
+<section id="concepts" class="animate" style="--i:4">
+  <h2>Key Concepts & Mental Model</h2>
+  <p>
+    These are the things you must hold in your head to work on this codebase effectively.
+    Each invariant is enforced somewhere; violating assumptions here leads to subtle bugs.
+  </p>
+
+  <ol class="concept-list">
+    <li>
+      <strong>One Active Session Per User</strong>
+      <span>The bot is single-user, but the session model supports multi-user. Auto-created on first message. Closed sessions are read-only. If no active session exists, <code>NoActiveSessionError</code> is raised and caught to auto-create.</span>
+    </li>
+    <li>
+      <strong>Message History Is a Serialized Blob</strong>
+      <span><code>Session.message_history_json</code> stores the full pydantic-ai message list as JSON. It's deserialized on every turn, mutated, and re-serialized. This is the LLM's context window — schema changes break history.</span>
+    </li>
+    <li>
+      <strong>Per-User Lock Prevents Race Conditions</strong>
+      <span><code>asyncio.Lock</code> per user_id in <code>run_turn.py:82</code>. Two rapid messages serialize — the second waits for the first to complete. Without this, turns interleave and history is corrupted.</span>
+    </li>
+    <li>
+      <strong>Container-First Development</strong>
+      <span>Everything runs in Docker. The host is irrelevant. <code>/app/.venv/bin/</code> must be in PATH. Services talk via container names (e.g., <code>http://bgutil:4416</code>). Never use <code>127.0.0.1</code> for cross-container communication.</span>
+    </li>
+    <li class="gotcha">
+      <strong>Tool Sentinel Interception</strong>
+      <span><code>run_turn</code> checks for <code>DELETE_CONFIRM_SENTINEL</code> in the LLM response. If found, it sends a confirmation prompt instead of the raw text. This is how the delete-note confirmation flow works — silently, without the LLM knowing.</span>
+    </li>
+    <li class="gotcha">
+      <strong>Queue Jobs Are Ephemeral</strong>
+      <span>The transcription queue is an <code>asyncio.Queue</code> in memory. On bot restart, pending jobs vanish. Users won't know why their transcript never arrived. Acceptable for a personal bot, but document this limitation.</span>
+    </li>
+    <li class="gotcha">
+      <strong>YouTube Bot Detection Requires Three Things</strong>
+      <span>To download from YouTube on a datacenter IP: (1) bgutil sidecar for PO tokens, (2) <code>mweb</code> player client, (3) Node.js ≥22 for EJS challenge solving. Missing any one = "Sign in to confirm you're not a bot."</span>
+    </li>
+    <li>
+      <strong>Groq Falls Back to Local Whisper Silently</strong>
+      <span>If the Groq API key is missing, quota is exceeded, or the file is >25MB, the system falls back to local Whisper tiny (39MB model, ~400MB RAM). The user is not notified which path was taken — only the <code>service_used</code> field in metadata reveals it.</span>
+    </li>
+  </ol>
+</section>
+
+<!-- ==================== EXTENSIBILITY ==================== -->
+<section id="extensibility" class="animate" style="--i:5">
+  <h2>Extensibility</h2>
+  <p>
+    The codebase is designed so that adding new capabilities requires touching <strong>exactly one file</strong>.
+    No edits to <code>main.py</code>, no manual wiring, no registration lists. The factory pattern and
+    auto-discovery handle everything.
+  </p>
+
+  <h3>How Dependency Injection Works</h3>
+  <p>
+    All agent tools receive their runtime dependencies through <code>RunContext[AgentDeps]</code> instead of
+    module-level globals. <code>AgentDeps</code> is a dataclass created in <code>main.py</code> and passed to
+    every tool invocation automatically by pydantic-ai.
+  </p>
+
+<pre><code># src/assistant/agent/domain/deps.py
+from dataclasses import dataclass
+from aiogram import Bot
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+@dataclass
+class AgentDeps:
+    scheduler: AsyncIOScheduler
+    checkin_repo: ScheduledCheckInRepository
+    prompt_repo: PromptRepository
+    note_repo: NoteRepository
+    bot: Bot
+    vikunja_client: VikunjaClient
+    searxng_client: SearXNGClient
+    jina_client: JinaClient
+    rebrowser_client: RebrowserClient</code></pre>
+
+  <div class="callout callout--sage">
+    <strong>Rule:</strong> If your new tool needs a new dependency, add it to <code>AgentDeps</code> and
+    instantiate it in <code>main.py</code>. All existing tools receive the updated container automatically.
+  </div>
+
+  <h3>Adding a New Agent Tool</h3>
+  <p>Create one file in <code>src/assistant/agent/tools/</code>:</p>
+
+<pre><code># src/assistant/agent/tools/weather_tools.py
+from __future__ import annotations
+
+import structlog
+from pydantic_ai import RunContext
+
+from assistant.agent.domain.deps import AgentDeps
+from assistant.agent.tools.registry import tool
+
+logger = structlog.get_logger()
+
+
+@tool(category="🌤️ Weather")
+async def get_weather(ctx: RunContext[AgentDeps], city: str) -> str:
+    """Get the current weather for a city.
+
+    Args:
+        city: City name, e.g. "London" or "New York".
+    """
+    logger.info("weather_tool_called", city=city)
+    return f"The weather in {city} is sunny and 22°C."
+</code></pre>
+
+  <p>That's it. The <code>@tool(category="...")</code> decorator registers the function in <code>ALL_TOOLS</code>
+  and declares its display category. On startup, <code>main.py</code> iterates over <code>ALL_TOOLS</code> and calls
+  <code>agent.tool(fn)</code> for each one. The <code>/tools</code> command discovers categories dynamically —
+  no central map to maintain. No other file needs to change.</p>
+
+  <div class="callout callout--green">
+    <strong>What happens under the hood:</strong>
+    <ol style="margin-top:8px; padding-left:20px;">
+      <li>Module is imported when <code>main.py</code> runs (or earlier if something else imports it)</li>
+      <li><code>@tool(category="...")</code> appends the function to <code>ALL_TOOLS</code> and records its category</li>
+      <li><code>main.py</code> calls <code>create_agent()</code>, then loops <code>for tool_fn in ALL_TOOLS: agent.tool(tool_fn)</code></li>
+      <li>The <code>/tools</code> command reads categories from the registry and groups tools automatically</li>
+      <li>The tool is callable by the LLM immediately</li>
+    </ol>
+  </div>
+
+  <h3>Adding a New Telegram Command</h3>
+  <p>Create one file in <code>src/assistant/telegram/handlers/</code>:</p>
+
+<pre><code># src/assistant/telegram/handlers/weather_commands.py
+from __future__ import annotations
+
+import structlog
+from aiogram import Router
+from aiogram.filters import Command
+from aiogram.types import BotCommand, Message
+
+from assistant.telegram.formatting import send_message
+
+logger = structlog.get_logger()
+
+router = Router()
+
+COMMANDS = [
+    BotCommand(command="weather", description="Get current weather"),
+]
+
+
+@router.message(Command("weather"))
+async def cmd_weather(message: Message) -> None:
+    """Handle /weather command."""
+    if not message.text:
+        return
+    await send_message(message, "It's sunny! ☀️")
+</code></pre>
+
+  <p>That's it. <code>discover_routers()</code> finds the <code>router</code> automatically.
+  <code>discover_commands()</code> collects <code>COMMANDS</code> for the Telegram menu.
+  No other file needs to change.</p>
+
+  <div class="callout callout--green">
+    <strong>Router registration order:</strong> The catch-all <code>message.py</code> router must be last.
+    <code>discover_routers()</code> returns <code>(module_name, router)</code> tuples and
+    <code>main.py</code> sorts them by a priority map so <code>errors</code> is first and <code>message</code> is last.
+    New command routers default to priority 50 (middle) and are registered before the catch-all.
+  </div>
+
+  <h3>Adding a New Domain Module</h3>
+  <p>For a full feature (domain + application + infrastructure), follow the existing DDD structure:</p>
+
+<pre><code>src/assistant/weather/
+  __init__.py
+  domain/
+    __init__.py
+    weather_report.py          # Entity / Value Object
+    weather_repository.py      # Protocol
+  application/
+    __init__.py
+    fetch_weather.py           # Use case
+  infrastructure/
+    __init__.py
+    openweather_client.py      # Adapter</code></pre>
+
+  <p>Then wire the new repository/client into <code>AgentDeps</code> and pass it to any tool that needs it.
+  The domain layer never imports infrastructure — only Protocols and value objects.</p>
+
+  <h3>Architecture Decisions</h3>
+  <p>These patterns were chosen after evaluating alternatives. Full ADRs are in
+  <code>local_code/docs/extensibility-refactor/architecture/</code>.</p>
+
+  <table style="width:100%; border-collapse:collapse; margin:16px 0; font-size:14px;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border-bright);">
+        <th style="text-align:left; padding:8px 12px;">Decision</th>
+        <th style="text-align:left; padding:8px 12px;">Chosen</th>
+        <th style="text-align:left; padding:8px 12px;">Rejected</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:8px 12px;">Tool DI</td>
+        <td style="padding:8px 12px;"><code>RunContext[AgentDeps]</code></td>
+        <td style="padding:8px 12px;">Module-level globals, class-based toolsets, <code>functools.partial</code></td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:8px 12px;">Scheduler→agent cycle</td>
+        <td style="padding:8px 12px;">Callback pattern (<code>run_agent</code>)</td>
+        <td style="padding:8px 12px;">Event bus, mediator class, mid-file import</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:8px 12px;">Agent creation</td>
+        <td style="padding:8px 12px;">Factory in <code>main.py</code></td>
+        <td style="padding:8px 12px;">Module-level <code>agent</code> instance</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:8px 12px;">Tool registration</td>
+        <td style="padding:8px 12px;"><code>@tool</code> + <code>ALL_TOOLS</code> registry</td>
+        <td style="padding:8px 12px;">Manual registration list, plugin system</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:8px 12px;">Router discovery</td>
+        <td style="padding:8px 12px;"><code>pkgutil.iter_modules</code> + priority sort</td>
+        <td style="padding:8px 12px;">Manual router list in <code>main.py</code></td>
+      </tr>
+      <tr>
+        <td style="padding:8px 12px;">Command menu</td>
+        <td style="padding:8px 12px;"><code>COMMANDS</code> export per handler</td>
+        <td style="padding:8px 12px;">Monkey-patch aiogram Router, manual command list</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ==================== GETTING STARTED ==================== -->
+<section id="getting-started" class="animate" style="--i:6">
+  <h2>Getting Started</h2>
+
+  <h3>1. Clone & Configure</h3>
+<pre><code>git clone &lt;repo-url&gt; telegram-assistant
+cd telegram-assistant
+cp .env.example .env
+# Edit .env with your API keys and tokens</code></pre>
+
+  <h3>2. Deploy</h3>
+<pre><code># From project root — .env must be here
+make deploy
+
+# Or explicitly:
+docker compose --env-file .env -f deploy/docker-compose.yml up -d --build</code></pre>
+
+  <h3>3. Verify</h3>
+<pre><code># Check all services are healthy
+docker compose --env-file .env -f deploy/docker-compose.yml ps
+
+# View bot logs
+make botlogs
+
+# Run tests
+make test</code></pre>
+
+  <h3>4. Test Video Transcription (Inside Container)</h3>
+<pre><code># Copy test script into container
+docker cp development/playground/test_full_transcription.py \
+  deploy-bot-1:/tmp/
+
+# Run it — tests the full pipeline
+docker exec -it deploy-bot-1 /app/.venv/bin/python3 \
+  /tmp/test_full_transcription.py \
+  "https://www.youtube.com/watch?v=dQw4w9WgXcQ"</code></pre>
+
+  <div class="callout callout--green">
+    <strong>Production checklist.</strong> Before declaring the bot ready:
+    <ul style="margin-top:8px; padding-left:20px;">
+      <li><code>.env</code> is never committed (check <code>.gitignore</code>)</li>
+      <li>All services show <code>Up</code> or <code>healthy</code> in <code>docker ps</code></li>
+      <li>Video transcription test passes from inside the container</li>
+      <li>Bot responds to Telegram messages without <code>TelegramConflictError</code></li>
+      <li>Only one bot instance is running (check <code>docker ps</code>)</li>
+    </ul>
+  </div>
+</section>
+
+<footer style="margin-top:80px; padding-top:24px; border-top:1px solid var(--border); color:var(--text-dim); font-size:13px; text-align:center;">
+  Generated from actual codebase — <code>src/assistant/</code> + <code>local_code/docs/</code> + <code>deploy/</code>
+</footer>
+
+</main>
+</div>
+
+<script>
+function toggleTheme() {
+  const body = document.body;
+  const current = body.getAttribute('data-theme');
+  if (current === 'dark') {
+    body.setAttribute('data-theme', 'light');
+  } else if (current === 'light') {
+    body.removeAttribute('data-theme');
+  } else {
+    body.setAttribute('data-theme', 'dark');
+  }
+}
+
+// Sidebar active link tracking
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('.sidebar a');
+
+function onScroll() {
+  let current = '';
+  sections.forEach(section => {
+    const rect = section.getBoundingClientRect();
+    if (rect.top <= 100) current = section.getAttribute('id');
+  });
+  navLinks.forEach(link => {
+    link.classList.toggle('active', link.getAttribute('href') === '#' + current);
+  });
+}
+
+window.addEventListener('scroll', onScroll);
+onScroll();
+</script>
+
+</body>
+</html>

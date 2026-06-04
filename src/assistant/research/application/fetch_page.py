@@ -7,11 +7,8 @@ from assistant.research.infrastructure.rebrowser_client import RebrowserClient
 
 logger = structlog.get_logger()
 
-_jina = JinaClient()
-_rebrowser = RebrowserClient()
 
-
-async def fetch_page(url: str) -> str | None:
+async def fetch_page(url: str, jina: JinaClient, rebrowser: RebrowserClient) -> str | None:
     """Fetch a URL and return its content as text.
 
     Tries Jina Reader first (fast, handles JS-heavy pages). Falls back to
@@ -27,13 +24,13 @@ async def fetch_page(url: str) -> str | None:
     """
     logger.info("fetch_page_start", url=url)
 
-    content = await _jina.fetch(url)
+    content = await jina.fetch(url)
     if content:
         logger.info("fetch_page_jina_success", url=url, chars=len(content))
         return content
 
     logger.info("fetch_page_falling_back_to_playwright", url=url)
-    content = await _rebrowser.fetch(url)
+    content = await rebrowser.fetch(url)
     if content:
         logger.info("fetch_page_playwright_success", url=url, chars=len(content))
         return content

@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 import aiosqlite
 
+from assistant.agent.domain.system_prompt import _SYSTEM_PROMPT as _DEFAULT_SYSTEM_PROMPT
 from assistant.conversation.domain.repositories import SessionRepository, TurnRepository
 from assistant.conversation.domain.session import Session, SessionStatus
 from assistant.conversation.domain.turn import Turn, TurnRole
@@ -46,26 +47,6 @@ CREATE TABLE IF NOT EXISTS system_prompts (
 CREATE INDEX IF NOT EXISTS idx_turns_session ON turns(session_id, ts);
 CREATE INDEX IF NOT EXISTS idx_sessions_user  ON sessions(user_id, last_active DESC);
 """
-
-
-_DEFAULT_SYSTEM_PROMPT = (
-    "You are a personal AI assistant accessed via Telegram.\n"
-    "You help with tasks, research, notes, calendar, and general questions.\n"
-    "Use Markdown formatting for lists and code blocks.\n\n"
-    "=== TIME AWARENESS ===\n"
-    "When the user asks for any time-based action — scheduling a check-in, "
-    "setting a reminder, setting a task due date, or any request involving a "
-    "specific time — you MUST call get_current_time first to know the current "
-    "time and timezone. Do not guess the time. Do not assume UTC unless the "
-    "user explicitly says so.\n\n"
-    "=== RESPONSE REVIEW (run before every response) ===\n"
-    "1. ASSUMPTIONS — What am I assuming? Did I validate it?\n"
-    "2. TOOL USAGE — Did I use the required tools for this request?\n"
-    "3. CONCISENESS — Can I remove 30% of the words without losing meaning? "
-    "Remove filler and sympathy phrases.\n"
-    "4. ACCURACY — Is every fact grounded in tool output or user input?\n"
-    "5. ACTIONABILITY — Did I provide a clear next step or concrete answer?"
-)
 
 
 async def init_db(sqlite_path: str) -> None:

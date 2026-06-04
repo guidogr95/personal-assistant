@@ -19,16 +19,24 @@ from assistant.telegram.handlers.tool_commands import (
 
 
 def test_should_group_known_tools_into_categories() -> None:
-    tools = {
-        "get_current_time": "Get time.",
-        "create_note": "Create a note.",
-        "search": "Search web.",
-    }
-    categorized = _categorize_tools(tools, mcp_tools=None)
-    assert "🕐 Time" in categorized
-    assert "📝 Notes" in categorized
-    assert "🔍 Research" in categorized
-    assert any(name == "get_current_time" for name, _ in categorized["🕐 Time"])
+    with patch(
+        "assistant.telegram.handlers.tool_commands._TOOL_CATEGORY_MAP",
+        {
+            "get_current_time": "🕐 Time",
+            "create_note": "📝 Notes",
+            "search": "🔍 Research",
+        },
+    ):
+        tools = {
+            "get_current_time": "Get time.",
+            "create_note": "Create a note.",
+            "search": "Search web.",
+        }
+        categorized = _categorize_tools(tools, mcp_tools=None)
+        assert "🕐 Time" in categorized
+        assert "📝 Notes" in categorized
+        assert "🔍 Research" in categorized
+        assert any(name == "get_current_time" for name, _ in categorized["🕐 Time"])
 
 
 def test_should_place_unknown_tools_in_other() -> None:
@@ -99,13 +107,20 @@ def test_should_split_into_chunks_when_text_exceeds_limit() -> None:
 
 
 def test_should_include_all_categories_in_chunks() -> None:
-    tools = {"get_current_time": "Get time.", "create_note": "Create."}
-    categorized = _categorize_tools(tools, mcp_tools=None)
-    chunks = _build_all_tools_markdown(categorized)
-    full_text = "\n".join(chunks)
-    assert "🕐 Time" in full_text
-    assert "📝 Notes" in full_text
-    assert "`get_current_time`" in full_text
+    with patch(
+        "assistant.telegram.handlers.tool_commands._TOOL_CATEGORY_MAP",
+        {
+            "get_current_time": "🕐 Time",
+            "create_note": "📝 Notes",
+        },
+    ):
+        tools = {"get_current_time": "Get time.", "create_note": "Create."}
+        categorized = _categorize_tools(tools, mcp_tools=None)
+        chunks = _build_all_tools_markdown(categorized)
+        full_text = "\n".join(chunks)
+        assert "🕐 Time" in full_text
+        assert "📝 Notes" in full_text
+        assert "`get_current_time`" in full_text
 
 
 # ---------------------------------------------------------------------------

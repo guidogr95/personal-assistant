@@ -3,8 +3,10 @@ from __future__ import annotations
 import structlog
 from aiogram import Router
 from aiogram.types import Message
+from pydantic_ai import Agent
 
 from assistant.agent.application.run_turn import run_turn
+from assistant.agent.domain.deps import AgentDeps
 from assistant.agent.tools.notes_tools import DELETE_CONFIRM_SENTINEL
 from assistant.conversation.application.open_session import open_session_for_user
 from assistant.conversation.domain.repositories import SessionRepository, TurnRepository
@@ -25,6 +27,8 @@ async def on_message(
     session_repo: SessionRepository,
     turn_repo: TurnRepository,
     prompt_repo: PromptRepository,
+    agent: Agent[AgentDeps, str],
+    agent_deps: AgentDeps,
 ) -> None:
     """Route a plain user message through the agent and reply."""
     if not message.text or not message.from_user:
@@ -39,6 +43,8 @@ async def on_message(
             session_repo=session_repo,
             turn_repo=turn_repo,
             prompt_repo=prompt_repo,
+            agent=agent,
+            agent_deps=agent_deps,
         )
     except NoActiveSessionError:
         # First message ever or after all sessions were closed: auto-create a session.
@@ -49,6 +55,8 @@ async def on_message(
             session_repo=session_repo,
             turn_repo=turn_repo,
             prompt_repo=prompt_repo,
+            agent=agent,
+            agent_deps=agent_deps,
         )
 
     # Try Markdown first; fall back to plain text if the reply contains

@@ -3,10 +3,12 @@ from __future__ import annotations
 import asyncio
 
 import structlog
+from pydantic_ai import Agent
 from pydantic_ai.exceptions import ModelHTTPError
 from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter, ToolReturnPart
 
-from assistant.agent.domain.agent import _SYSTEM_PROMPT, agent
+from assistant.agent.domain.deps import AgentDeps
+from assistant.agent.domain.system_prompt import _SYSTEM_PROMPT
 from assistant.agent.tools.notes_tools import DELETE_CONFIRM_SENTINEL
 from assistant.conversation.domain.repositories import SessionRepository, TurnRepository
 from assistant.conversation.domain.turn import Turn, TurnRole
@@ -69,6 +71,8 @@ async def run_turn(
     session_repo: SessionRepository,
     turn_repo: TurnRepository,
     prompt_repo: PromptRepository,
+    agent: Agent[AgentDeps, str],
+    agent_deps: AgentDeps,
 ) -> str:
     """Execute one conversational turn: run the agent and persist the exchange.
 
@@ -87,6 +91,8 @@ async def run_turn(
             session_repo=session_repo,
             turn_repo=turn_repo,
             prompt_repo=prompt_repo,
+            agent=agent,
+            agent_deps=agent_deps,
         )
 
 
@@ -96,6 +102,8 @@ async def _run_turn_locked(
     session_repo: SessionRepository,
     turn_repo: TurnRepository,
     prompt_repo: PromptRepository,
+    agent: Agent[AgentDeps, str],
+    agent_deps: AgentDeps,
 ) -> str:
     """Inner implementation of run_turn, executed under the per-user lock."""
     session = await session_repo.get_active_for_user(user_id)
@@ -125,7 +133,10 @@ async def _run_turn_locked(
 
     try:
         result = await agent.run(
-            user_message, message_history=message_history, instructions=instructions
+            user_message,
+            message_history=message_history,
+            instructions=instructions,
+            deps=agent_deps,
         )
     except ModelHTTPError as exc:
         logger.error(

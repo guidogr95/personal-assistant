@@ -6,20 +6,21 @@ from zoneinfo import ZoneInfo
 
 import structlog
 from aiogram import Bot, Dispatcher
-from aiogram.types import BotCommand
 
-from assistant.agent.domain.agent import agent
-from assistant.agent.tools.checkin_tools import configure_checkin_tools
-from assistant.agent.tools.prompt_tools import configure_prompt_tools
-from assistant.agent.tools.reminder_tools import configure_reminder_tools
-from assistant.agent.tools.video_tools import register_video_tools
+from assistant.agent.domain.agent import create_agent
+from assistant.agent.domain.deps import AgentDeps
+from assistant.agent.tools.registry import ALL_TOOLS
 from assistant.conversation.infrastructure.sqlite_repositories import (
     SQLiteSessionRepository,
     SQLiteTurnRepository,
     init_db,
 )
 from assistant.notes.infrastructure.markdown_repository import MarkdownNoteRepository
+from assistant.prompts.application.get_system_prompt import get_system_prompt
 from assistant.prompts.infrastructure.sqlite_prompt_repository import SQLitePromptRepository
+from assistant.research.infrastructure.jina_client import JinaClient
+from assistant.research.infrastructure.rebrowser_client import RebrowserClient
+from assistant.research.infrastructure.searxng_client import SearXNGClient
 from assistant.scheduler.application.run_checkin import configure_checkin_runner, run_checkin
 from assistant.scheduler.infrastructure.apscheduler_registry import (
     create_scheduler,
@@ -31,17 +32,9 @@ from assistant.scheduler.infrastructure.sqlite_checkin_repository import (
 )
 from assistant.shared.config import settings
 from assistant.shared.logging import configure_logging
+from assistant.tasks.infrastructure.vikunja_client import VikunjaClient
 from assistant.telegram.bot import AllowedUserMiddleware
-from assistant.telegram.handlers import (
-    callbacks,
-    checkin_commands,
-    errors,
-    message,
-    prompt_commands,
-    session_commands,
-    tool_commands,
-    video_commands,
-)
+from assistant.telegram.handlers import discover_commands, discover_routers
 from assistant.video.application.transcription_queue import (
     configure_transcription_queue,
     start_worker,
@@ -64,41 +57,62 @@ async def main() -> None:
     note_repo = MarkdownNoteRepository()
 
     bot = Bot(token=settings.telegram_bot_token)
-    await bot.set_my_commands(
-        [
-            BotCommand(command="help", description="List all commands"),
-            BotCommand(command="new", description="Start a fresh session"),
-            BotCommand(command="close", description="Close session and generate title"),
-            BotCommand(command="sessions", description="Browse recent sessions"),
-            BotCommand(command="checkin", description="Manage proactive check-ins"),
-            BotCommand(command="time", description="Show current server time"),
-            BotCommand(command="tools", description="List all tools the agent has access to"),
-            BotCommand(command="system", description="Show or update system prompt"),
-            BotCommand(command="transcribe", description="Transcribe a video URL"),
-        ]
-    )
+    await bot.set_my_commands(discover_commands())
     dp = Dispatcher()
 
     dp.update.middleware(AllowedUserMiddleware())
 
-    # Error handler registered first so it catches exceptions from all other routers
-    dp.include_router(errors.router)
-    # Session commands registered before the catch-all message handler
-    dp.include_router(session_commands.router)
-    dp.include_router(checkin_commands.router)
-    dp.include_router(tool_commands.router)
-    dp.include_router(prompt_commands.router)
-    dp.include_router(callbacks.router)
-    dp.include_router(video_commands.router)
-    dp.include_router(message.router)
+    # Auto-discover and register all routers. Order matters: errors first,
+    # then specific command routers, then the catch-all message handler.
+    _ROUTER_PRIORITY: dict[str, int] = {
+        "errors": 0,
+        "session_commands": 1,
+        "checkin_commands": 2,
+        "tool_commands": 3,
+        "prompt_commands": 4,
+        "callbacks": 5,
+        "video_commands": 6,
+        "message": 99,
+    }
+    module_routers = discover_routers()
+    module_routers.sort(key=lambda item: _ROUTER_PRIORITY.get(item[0], 50))
+    for _name, router in module_routers:
+        dp.include_router(router)
 
     scheduler = create_scheduler()
-    configure_checkin_runner(bot=bot, checkin_repo=checkin_repo)
-    configure_checkin_tools(scheduler=scheduler, checkin_repo=checkin_repo)
-    configure_reminder_tools(scheduler=scheduler, checkin_repo=checkin_repo)
-    configure_prompt_tools(prompt_repo=prompt_repo)
+
+    # Infrastructure clients — created at runtime, not import time.
+    vikunja_client = VikunjaClient()
+    searxng_client = SearXNGClient()
+    jina_client = JinaClient()
+    rebrowser_client = RebrowserClient()
+
+    agent_deps = AgentDeps(
+        scheduler=scheduler,
+        checkin_repo=checkin_repo,
+        prompt_repo=prompt_repo,
+        note_repo=note_repo,
+        bot=bot,
+        vikunja_client=vikunja_client,
+        searxng_client=searxng_client,
+        jina_client=jina_client,
+        rebrowser_client=rebrowser_client,
+    )
+
+    # Agent must be created AFTER prompt_repo is ready so the system prompt
+    # can be loaded from DB on startup.
+    agent = create_agent(system_prompt=await get_system_prompt(prompt_repo))
+
+    # Auto-discover and register all tools decorated with @tool.
+    for tool_fn in ALL_TOOLS:
+        agent.tool(tool_fn)
+
+    configure_checkin_runner(
+        bot=bot,
+        checkin_repo=checkin_repo,
+        run_agent=lambda instructions: agent.run(instructions, deps=agent_deps).output,
+    )
     configure_transcription_queue(bot=bot, note_repo=note_repo)
-    register_video_tools(agent)
     asyncio.create_task(start_worker())
     logger.info("transcription_worker_task_created")
 
@@ -138,6 +152,9 @@ async def main() -> None:
                 checkin_repo=checkin_repo,
                 prompt_repo=prompt_repo,
                 scheduler=scheduler,
+                agent=agent,
+                agent_deps=agent_deps,
+                note_repo=note_repo,
             )
     finally:
         scheduler.shutdown(wait=False)

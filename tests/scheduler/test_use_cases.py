@@ -153,7 +153,7 @@ async def test_should_raise_when_checkin_not_found_for_delete() -> None:
 async def test_should_skip_run_when_checkin_not_found() -> None:
     mock_bot = AsyncMock()
     repo = _make_mock_repo(get_by_id=None)
-    configure_checkin_runner(bot=mock_bot, checkin_repo=repo)
+    configure_checkin_runner(bot=mock_bot, checkin_repo=repo, run_agent=AsyncMock())
 
     await run_checkin("nonexistent-id")
 
@@ -170,7 +170,7 @@ async def test_should_skip_run_when_checkin_disabled() -> None:
 
     mock_bot = AsyncMock()
     repo = _make_mock_repo(get_by_id=disabled)
-    configure_checkin_runner(bot=mock_bot, checkin_repo=repo)
+    configure_checkin_runner(bot=mock_bot, checkin_repo=repo, run_agent=AsyncMock())
 
     await run_checkin(disabled.id)
 
@@ -180,21 +180,15 @@ async def test_should_skip_run_when_checkin_disabled() -> None:
 async def test_should_run_checkin_and_send_message() -> None:
     mock_bot = AsyncMock()
     repo = _make_mock_repo(get_by_id=_VALID_CHECKIN)
-    configure_checkin_runner(bot=mock_bot, checkin_repo=repo)
+    mock_run_agent = AsyncMock(return_value="You have 3 open tasks.")
+    configure_checkin_runner(bot=mock_bot, checkin_repo=repo, run_agent=mock_run_agent)
 
-    mock_result = MagicMock()
-    mock_result.output = "You have 3 open tasks."
-
-    with (
-        patch("assistant.agent.domain.agent.agent") as mock_agent,
-        patch("assistant.scheduler.application.run_checkin.settings") as mock_settings,
-    ):
-        mock_agent.run = AsyncMock(return_value=mock_result)
+    with patch("assistant.scheduler.application.run_checkin.settings") as mock_settings:
         mock_settings.telegram_allowed_user_id = 12345
 
         await run_checkin(_VALID_CHECKIN.id)
 
-    mock_agent.run.assert_awaited_once_with(_VALID_CHECKIN.instructions)
+    mock_run_agent.assert_awaited_once_with(_VALID_CHECKIN.instructions)
     mock_bot.send_message.assert_awaited_once()
     call_kwargs = mock_bot.send_message.call_args
     assert "Morning Tasks" in call_kwargs.kwargs["text"]
@@ -204,13 +198,10 @@ async def test_should_run_checkin_and_send_message() -> None:
 async def test_should_send_failure_notification_when_agent_raises() -> None:
     mock_bot = AsyncMock(spec=Bot)
     repo = _make_mock_repo(get_by_id=_VALID_CHECKIN)
-    configure_checkin_runner(bot=mock_bot, checkin_repo=repo)
+    mock_run_agent = AsyncMock(side_effect=RuntimeError("LLM down"))
+    configure_checkin_runner(bot=mock_bot, checkin_repo=repo, run_agent=mock_run_agent)
 
-    with (
-        patch("assistant.agent.domain.agent.agent") as mock_agent,
-        patch("assistant.scheduler.application.run_checkin.settings") as mock_settings,
-    ):
-        mock_agent.run = AsyncMock(side_effect=RuntimeError("LLM down"))
+    with patch("assistant.scheduler.application.run_checkin.settings") as mock_settings:
         mock_settings.telegram_allowed_user_id = 12345
 
         await run_checkin(_VALID_CHECKIN.id)

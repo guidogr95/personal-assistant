@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+from typing import cast
+
 import structlog
 from aiogram import F, Router
 from aiogram.types import BufferedInputFile, CallbackQuery, Message
+from pydantic_ai import Agent
 
-from assistant.agent.domain.agent import agent
+from assistant.agent.domain.deps import AgentDeps
+from assistant.agent.tools.registry import ToolCategory
 from assistant.conversation.application.resume_session import resume_session
 from assistant.conversation.domain.repositories import SessionRepository
 from assistant.notes.application.delete_note import delete_note
-from assistant.notes.infrastructure.markdown_repository import MarkdownNoteRepository
+from assistant.notes.domain.note_repository import NoteRepository
 from assistant.shared.exceptions import InfrastructureError, SessionNotFoundError
 from assistant.telegram.handlers.tool_commands import (
     _build_all_tools_markdown,
@@ -29,11 +33,12 @@ logger = structlog.get_logger()
 
 router = Router()
 
-_note_repo = MarkdownNoteRepository()
-
 
 @router.callback_query(F.data == "delete:confirm")
-async def on_delete_confirm(callback: CallbackQuery) -> None:
+async def on_delete_confirm(
+    callback: CallbackQuery,
+    note_repo: NoteRepository,
+) -> None:
     """Execute the pending note deletion after the user confirms."""
     if not callback.from_user or not callback.message:
         await callback.answer()
@@ -48,7 +53,7 @@ async def on_delete_confirm(callback: CallbackQuery) -> None:
         return
 
     try:
-        deleted = await delete_note(filename, _note_repo)
+        deleted = await delete_note(filename, note_repo)
     except InfrastructureError as exc:
         logger.error("delete_note_failed", filename=filename, error=str(exc))
         await callback.answer("Failed to delete the note. Check the logs.", show_alert=True)
@@ -58,9 +63,7 @@ async def on_delete_confirm(callback: CallbackQuery) -> None:
         await callback.answer("Deleted.")
         if isinstance(callback.message, Message):
             await callback.message.edit_text(
-                convert_markdown_to_telegram_html(
-                    f"🗑 **{filename}** has been deleted."
-                ),
+                convert_markdown_to_telegram_html(f"🗑 **{filename}** has been deleted."),
                 parse_mode="HTML",
             )
     else:
@@ -77,13 +80,14 @@ async def on_delete_cancel(callback: CallbackQuery) -> None:
     pending_deletions.pop(callback.from_user.id, None)
     await callback.answer("Cancelled.")
     if isinstance(callback.message, Message):
-        await callback.message.edit_text(
-            "Deletion cancelled — note kept.", parse_mode="HTML"
-        )
+        await callback.message.edit_text("Deletion cancelled — note kept.", parse_mode="HTML")
 
 
 @router.callback_query()
-async def on_tool_category_tap(callback: CallbackQuery) -> None:
+async def on_tool_category_tap(
+    callback: CallbackQuery,
+    agent: Agent[AgentDeps, str],
+) -> None:
     """Handle taps on the /tools category inline keyboard.
 
     Shows tools in the selected category, returns to the category menu,
@@ -144,7 +148,7 @@ async def on_tool_category_tap(callback: CallbackQuery) -> None:
         python_tools = {}
     mcp_tools = await _fetch_mcp_tools()
     categorized = _categorize_tools(python_tools, mcp_tools)
-    tools = categorized.get(category_name, [])
+    tools = categorized.get(cast(ToolCategory, category_name), [])
 
     if not tools:
         await callback.answer("No tools in this category.")
@@ -161,7 +165,10 @@ async def on_tool_category_tap(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data.startswith("file:note:"))
-async def on_file_request(callback: CallbackQuery) -> None:
+async def on_file_request(
+    callback: CallbackQuery,
+    note_repo: NoteRepository,
+) -> None:
     """Send a note as a document when the user taps the file-request button."""
     if not callback.data or not callback.from_user or not callback.message:
         await callback.answer()
@@ -176,7 +183,7 @@ async def on_file_request(callback: CallbackQuery) -> None:
         )
         return
 
-    note = await _note_repo.read(filename)
+    note = await note_repo.read(filename)
     if note is None:
         await callback.answer("Note not found.", show_alert=True)
         return

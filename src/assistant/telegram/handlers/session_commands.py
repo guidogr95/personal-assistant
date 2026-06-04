@@ -3,9 +3,8 @@ from __future__ import annotations
 import structlog
 from aiogram import Router
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import BotCommand, Message
 
-from assistant.agent.domain.agent import agent
 from assistant.conversation.application import close_session, list_sessions, open_session
 from assistant.conversation.domain.repositories import SessionRepository, TurnRepository
 from assistant.shared.exceptions import NoActiveSessionError
@@ -15,6 +14,13 @@ from assistant.telegram.keyboards import build_sessions_keyboard
 logger = structlog.get_logger()
 
 router = Router()
+
+COMMANDS = [
+    BotCommand(command="help", description="List all commands"),
+    BotCommand(command="new", description="Start a fresh session"),
+    BotCommand(command="close", description="Close session and generate title"),
+    BotCommand(command="sessions", description="Browse recent sessions"),
+]
 
 _HELP_TEXT = """**Available commands**
 
@@ -62,6 +68,8 @@ async def cmd_close(
     message: Message,
     session_repo: SessionRepository,
     turn_repo: TurnRepository,
+    agent: Agent[AgentDeps, str],
+    agent_deps: AgentDeps,
 ) -> None:
     """Close the active session and display the generated title."""
     if not message.from_user:
@@ -72,6 +80,7 @@ async def cmd_close(
             session_repo=session_repo,
             turn_repo=turn_repo,
             agent=agent,
+            agent_deps=agent_deps,
         )
         await send_message(message, f"Session closed: {bold(title)}")
     except NoActiveSessionError:

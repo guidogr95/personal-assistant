@@ -6,6 +6,7 @@ Uses real temporary SQLite repositories. No LLM calls.
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -70,6 +71,7 @@ class TestCloseSession:
                 session_repo=session_repo,
                 turn_repo=turn_repo,
                 agent=mock_agent,
+                agent_deps=MagicMock(),
             )
 
 

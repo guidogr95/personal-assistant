@@ -3,7 +3,7 @@ from __future__ import annotations
 import structlog
 from aiogram import Router
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import BotCommand, Message
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from assistant.scheduler.application import delete_checkin, list_checkins, register_checkin
@@ -14,6 +14,10 @@ from assistant.telegram.formatting import bold, code, send_message
 logger = structlog.get_logger()
 
 router = Router()
+
+COMMANDS = [
+    BotCommand(command="checkin", description="Manage proactive check-ins"),
+]
 
 _USAGE = (
     "Usage:\n"

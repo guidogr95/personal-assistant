@@ -4,6 +4,7 @@ import structlog
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessagesTypeAdapter
 
+from assistant.agent.domain.deps import AgentDeps
 from assistant.conversation.domain.repositories import SessionRepository, TurnRepository
 from assistant.shared.exceptions import NoActiveSessionError
 
@@ -19,7 +20,8 @@ async def close_active_session(
     user_id: int,
     session_repo: SessionRepository,
     turn_repo: TurnRepository,
-    agent: Agent[None, str],
+    agent: Agent[AgentDeps, str],
+    agent_deps: AgentDeps,
 ) -> str:
     """Close the active session for the user and return the generated title.
 
@@ -32,7 +34,7 @@ async def close_active_session(
     if session is None:
         raise NoActiveSessionError(f"No active session to close for user {user_id}")
 
-    title = await _generate_title(session.message_history_json, agent)
+    title = await _generate_title(session.message_history_json, agent, agent_deps)
 
     session.close(title=title)
     await session_repo.save(session)
@@ -42,7 +44,8 @@ async def close_active_session(
 
 async def _generate_title(
     history_json: bytes | None,
-    agent: Agent[None, str],
+    agent: Agent[AgentDeps, str],
+    agent_deps: AgentDeps,
 ) -> str:
     """Ask the LLM to produce a short title for the conversation.
 
@@ -53,7 +56,7 @@ async def _generate_title(
 
     try:
         message_history = ModelMessagesTypeAdapter.validate_json(history_json)
-        result = await agent.run(_TITLE_PROMPT, message_history=message_history)
+        result = await agent.run(_TITLE_PROMPT, message_history=message_history, deps=agent_deps)
         title = result.output.strip()[:100]
         return title if title else "Untitled"
     except Exception as exc:

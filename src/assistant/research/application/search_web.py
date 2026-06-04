@@ -7,10 +7,8 @@ from assistant.research.infrastructure.searxng_client import SearXNGClient
 
 logger = structlog.get_logger()
 
-_searxng = SearXNGClient()
 
-
-async def search_web(query: str) -> list[SearchResult]:
+async def search_web(query: str, client: SearXNGClient) -> list[SearchResult]:
     """Execute a web search via SearXNG and return structured results.
 
     Args:
@@ -23,6 +21,6 @@ async def search_web(query: str) -> list[SearchResult]:
         InfrastructureError: If SearXNG is unreachable.
     """
     logger.info("search_web_start", query=query)
-    results = await _searxng.search(query)
+    results = await client.search(query)
     logger.info("search_web_complete", query=query, result_count=len(results))
     return results

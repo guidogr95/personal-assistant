@@ -9,19 +9,23 @@ import httpx
 import structlog
 from aiogram import Router
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import BotCommand, Message
 
+from assistant.agent.tools.registry import _TOOL_CATEGORIES as _TOOL_CATEGORY_MAP
+from assistant.agent.tools.registry import ToolCategory
 from assistant.shared.config import settings
 from assistant.shared.time import get_current_time
 from assistant.telegram.formatting import send_message
-from assistant.telegram.keyboards import (
-    _TOOL_CATEGORIES,
-    build_tool_categories_keyboard,
-)
+from assistant.telegram.keyboards import build_tool_categories_keyboard
 
 logger = structlog.get_logger()
 
 router = Router()
+
+COMMANDS = [
+    BotCommand(command="tools", description="List all tools the agent has access to"),
+    BotCommand(command="time", description="Show current server time"),
+]
 
 # Maximum length for a single Telegram text message (safety margin below 4096).
 _MAX_TELEGRAM_MESSAGE_LENGTH: int = 3_800
@@ -87,25 +91,23 @@ async def _fetch_mcp_tools() -> list[_McpTool] | None:
 def _categorize_tools(
     python_tools: dict[str, str],
     mcp_tools: list[_McpTool] | None,
-) -> dict[str, list[tuple[str, str]]]:
+) -> dict[ToolCategory, list[tuple[str, str]]]:
     """Group Python and MCP tools by category.
 
+    Categories are discovered dynamically from the ``@tool(category=...)``
+    decorator — each tool declares its own category. No central map is needed.
+
     Returns a dict mapping category display name to a list of (tool_name, description).
-    Tools not matching any known category go into "📦 Other".
+    Tools without a declared category fall back to "📦 Other".
     """
-    categorized: dict[str, list[tuple[str, str]]] = {cat: [] for cat in _TOOL_CATEGORIES}
-    categorized["📦 Other"] = []
+    # Build category buckets from what tools actually declare.
+    all_categories = set(_TOOL_CATEGORY_MAP.values())
+    categorized: dict[ToolCategory, list[tuple[str, str]]] = {cat: [] for cat in all_categories}
     categorized["🧠 Memory"] = []
 
-    # Invert the mapping for O(1) lookup
-    name_to_category: dict[str, str] = {}
-    for cat, names in _TOOL_CATEGORIES.items():
-        for name in names:
-            name_to_category[name] = cat
-
     for name, desc in sorted(python_tools.items()):
-        cat = name_to_category.get(name, "📦 Other")
-        categorized[cat].append((name, desc))
+        cat = _TOOL_CATEGORY_MAP.get(name, "📦 Other")
+        categorized.setdefault(cat, []).append((name, desc))
 
     if mcp_tools is not None:
         for tool in mcp_tools:
@@ -135,7 +137,7 @@ def _build_category_detail_markdown(
 
 
 def _build_all_tools_markdown(
-    categorized: dict[str, list[tuple[str, str]]],
+    categorized: dict[ToolCategory, list[tuple[str, str]]],
 ) -> list[str]:
     """Build a compact Markdown listing of all tools, split into message-sized chunks.
 
