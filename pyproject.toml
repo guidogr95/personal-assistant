@@ -19,8 +19,9 @@ dependencies = [
     "rebrowser-playwright>=1.47.0",
     "sqlalchemy[asyncio]>=2.0",
     "structlog>=24.0",
-    "yt-dlp>=2024.0",
+    "yt-dlp[default]>=2024.0",
     "youtube-transcript-api>=0.6",
+    "bgutil-ytdlp-pot-provider>=1.0",
 ]
 
 [dependency-groups]

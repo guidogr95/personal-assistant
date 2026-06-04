@@ -20,6 +20,25 @@ logger = structlog.get_logger()
 # an indefinitely hanging process from blocking the worker forever.
 _SUBPROCESS_TIMEOUT_SECONDS = 600
 
+# Patterns that indicate YouTube bot detection rather than a genuine error.
+_BOT_DETECTION_PATTERNS: list[str] = [
+    "sign in to confirm",
+    "confirm you're not a bot",
+    "unable to extract uploader id",
+    "http error 403",
+    "bot",
+]
+
+
+def is_bot_detection_error(stderr_text: str) -> bool:
+    """Return True if yt-dlp stderr indicates YouTube bot detection.
+
+    This is a heuristic based on known error messages from yt-dlp when
+    YouTube blocks datacenter IPs.
+    """
+    lower = stderr_text.lower()
+    return any(pattern in lower for pattern in _BOT_DETECTION_PATTERNS)
+
 
 def _detect_node_path() -> str | None:
     """Return the absolute path to a node binary, or None if not found."""
@@ -30,13 +49,26 @@ def _detect_node_path() -> str | None:
     return found
 
 
+# bgutil sidecar address inside the Docker network.
+_BGUTIL_BASE_URL: str = "http://bgutil:4416"
+
+
 def _ytdlp_base_flags() -> list[str]:
     """Build shared yt-dlp flags for bypassing YouTube bot detection.
 
-    Uses the remote EJS challenge solver and a local Node.js runtime to
-    solve JavaScript challenges that YouTube serves to bot-flagged IPs.
+    Uses:
+    - mweb player client (required for bgutil PO Token generation)
+    - bgutil-ytdlp-pot-provider sidecar for PO Tokens
+    - EJS challenge solver via Node.js for n/sig decryption
     """
-    flags: list[str] = ["--remote-components", "ejs:github"]
+    flags: list[str] = [
+        "--extractor-args",
+        "youtube:player_client=mweb",
+        "--extractor-args",
+        f"youtube:bgutil_base_url={_BGUTIL_BASE_URL}",
+        "--remote-components",
+        "ejs:github",
+    ]
     node_path = _detect_node_path()
     if node_path:
         flags.extend(["--js-runtimes", f"node:{node_path}"])
