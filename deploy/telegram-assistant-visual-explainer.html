@@ -735,13 +735,13 @@ onScroll();
         LLM["OpenAI-compatible API<br/>opencode.ai"]
     end
     subgraph net["Docker Network: assistant_net"]
-        BOT["\u{1F916} Bot<br/>aiogram + pydantic-ai<br/>Port: HTTP polling"]
-        MEM["\u{1F9E0} Memory<br/>MCP HTTP service<br/>Port: 8001"]
-        SRCH["\u{1F50D} SearXNG<br/>Local search engine<br/>Port: 8080"]
+        BOT["🤖 Bot<br/>aiogram + pydantic-ai<br/>Port: HTTP polling"]
+        MEM["🧠 Memory<br/>MCP HTTP service<br/>Port: 8001"]
+        SRCH["🔍 SearXNG<br/>Local search engine<br/>Port: 8080"]
         VIK["\u2705 Vikunja<br/>Task manager<br/>Port: 3456"]
-        DB["\u{1F5C4}\uFE0F MariaDB<br/>Vikunja database<br/>Port: 3306"]
-        BG["\u{1F3AC} bgutil<br/>YouTube PO tokens<br/>Port: 4416"]
-        SYNC["\u{1F504} Syncthing<br/>Notes sync<br/>Port: 22000"]
+        DB["🗄\uFE0F MariaDB<br/>Vikunja database<br/>Port: 3306"]
+        BG["🎬 bgutil<br/>YouTube PO tokens<br/>Port: 4416"]
+        SYNC["🔄 Syncthing<br/>Notes sync<br/>Port: 22000"]
     end
     TG -->|"long-polling"| BOT
     BOT -->|"HTTP"| LLM
@@ -905,11 +905,11 @@ onScroll();
       const clone=svg.cloneNode(true); clone.style.width=''; clone.style.height='';
       const bg=isDark?'#09090b':'#ffffff';
       const html='<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">'
-        +'<title>Diagram</title><style>'
+        +'<title>Diagram<\/title><style>'
         +'body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;'
         +'background:'+bg+';padding:40px;box-sizing:border-box}'
         +'svg{max-width:100%;max-height:90vh;height:auto}'
-        +'</style></head><body>'+clone.outerHTML+'</body></html>';
+        +'<\/style><\/head><body>'+clone.outerHTML+'<\/body><\/html>';
       open(URL.createObjectURL(new Blob([html],{type:'text/html'})),'_blank');
     }
     async function render() {
