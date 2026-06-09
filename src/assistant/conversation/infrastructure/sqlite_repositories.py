@@ -44,8 +44,20 @@ CREATE TABLE IF NOT EXISTS system_prompts (
     updated_at   TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS checkin_executions (
+    id            TEXT PRIMARY KEY,
+    checkin_id    TEXT NOT NULL,
+    checkin_name  TEXT NOT NULL,
+    fired_at      TEXT NOT NULL,
+    status        TEXT NOT NULL,
+    error_message TEXT,
+    output_text   TEXT,
+    created_at    TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_turns_session ON turns(session_id, ts);
 CREATE INDEX IF NOT EXISTS idx_sessions_user  ON sessions(user_id, last_active DESC);
+CREATE INDEX IF NOT EXISTS idx_checkin_executions_checkin ON checkin_executions(checkin_id, fired_at DESC);
 """
 
 

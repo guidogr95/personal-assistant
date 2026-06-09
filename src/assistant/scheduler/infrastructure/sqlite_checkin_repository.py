@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 import aiosqlite
 
@@ -167,3 +168,63 @@ class SQLiteScheduledCheckInRepository(ScheduledCheckInRepository):
                 await db.commit()
         except Exception as exc:
             raise InfrastructureError(f"Failed to delete check-in {checkin_id}") from exc
+
+    async def log_execution(
+        self,
+        execution_id: str,
+        checkin_id: str,
+        checkin_name: str,
+        fired_at: datetime,
+        status: str,
+        error_message: str | None,
+        output_text: str | None,
+    ) -> None:
+        """Record a check-in execution attempt."""
+        try:
+            async with aiosqlite.connect(self._path) as db:
+                await db.execute(
+                    """
+                    INSERT INTO checkin_executions
+                        (id, checkin_id, checkin_name, fired_at, status,
+                         error_message, output_text, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        execution_id,
+                        checkin_id,
+                        checkin_name,
+                        fired_at.isoformat(),
+                        status,
+                        error_message,
+                        output_text,
+                        datetime.now(UTC).isoformat(),
+                    ),
+                )
+                await db.commit()
+        except Exception as exc:
+            raise InfrastructureError(f"Failed to log execution {execution_id}") from exc
+
+    async def get_execution_history(
+        self,
+        checkin_id: str,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """Return recent executions for a check-in, newest first."""
+        try:
+            async with aiosqlite.connect(self._path) as db:
+                db.row_factory = aiosqlite.Row
+                async with db.execute(
+                    """
+                    SELECT * FROM checkin_executions
+                    WHERE checkin_id = ?
+                    ORDER BY fired_at DESC
+                    LIMIT ?
+                    """,
+                    (checkin_id, limit),
+                ) as cursor:
+                    rows = await cursor.fetchall()
+                    return [dict(r) for r in rows]
+        except Exception as exc:
+            raise InfrastructureError(
+                f"Failed to fetch execution history for check-in {checkin_id}"
+            ) from exc

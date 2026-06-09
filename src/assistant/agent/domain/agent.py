@@ -12,7 +12,6 @@ from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
 from assistant.agent.domain.deps import AgentDeps
-from assistant.agent.domain.system_prompt import _SYSTEM_PROMPT
 from assistant.memory.infrastructure.memory_mcp_client import create_memory_mcp_server
 from assistant.shared.config import settings
 
@@ -24,8 +23,8 @@ def create_agent(
     """Create a new Agent instance with the given configuration.
 
     Args:
-        system_prompt: System prompt text. Defaults to the built-in
-            ``_SYSTEM_PROMPT``.
+        system_prompt: System prompt text. When ``None``, no base system
+            prompt is set; the caller must pass instructions on every turn.
 
     Returns:
         Configured Agent ready for tool registration. The caller must
@@ -41,6 +40,6 @@ def create_agent(
 
     return Agent(
         model=model,
-        system_prompt=system_prompt or _SYSTEM_PROMPT,
+        system_prompt=system_prompt or (),
         toolsets=[memory_server],
     )

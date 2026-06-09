@@ -16,7 +16,6 @@ from assistant.conversation.infrastructure.sqlite_repositories import (
     init_db,
 )
 from assistant.notes.infrastructure.markdown_repository import MarkdownNoteRepository
-from assistant.prompts.application.get_system_prompt import get_system_prompt
 from assistant.prompts.infrastructure.sqlite_prompt_repository import SQLitePromptRepository
 from assistant.research.infrastructure.jina_client import JinaClient
 from assistant.research.infrastructure.rebrowser_client import RebrowserClient
@@ -101,7 +100,7 @@ async def main() -> None:
 
     # Agent must be created AFTER prompt_repo is ready so the system prompt
     # can be loaded from DB on startup.
-    agent = create_agent(system_prompt=await get_system_prompt(prompt_repo))
+    agent = create_agent()
 
     # Auto-discover and register all tools decorated with @tool.
     for tool_fn in ALL_TOOLS:

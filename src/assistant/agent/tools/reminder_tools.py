@@ -27,16 +27,16 @@ async def set_reminder(ctx: RunContext[AgentDeps], time_expr: str, message: str)
 
         "Local: 2026-06-01 20:50:00 (America/Guayaquil, UTC-5) | UTC: 2026-06-02 01:50:00"
 
-    Always assume the user is referring to their local timezone (the one
-    shown in the ``Local:`` part).  "Tomorrow at 9am" means 9am in that
-    timezone — convert to UTC before calling this tool.  Relative
-    expressions like "in 30 minutes" are always safe (they use the server
-    clock directly).  Do not guess the current time or timezone.
+    All time expressions are in the user's local timezone (America/Guayaquil,
+    UTC-5).  The tool handles all timezone conversion internally.  Do NOT
+    convert to UTC.  Pass the expression exactly as the user stated it.
+    Relative expressions like "in 30 minutes" are always safe (they use the
+    server clock directly).  Do not guess the current time or timezone.
 
     The bot will send the reminder message to Telegram automatically without
     any user prompt.  The time expression can be one-off or recurring.
 
-    Examples of time_expr (use the timezone from get_current_time):
+    Examples of time_expr (pass exactly as the user stated it):
     - "in 30 minutes"        → one-off reminder 30 minutes from now
     - "in 2 hours"           → one-off reminder 2 hours from now
     - "tomorrow at 9am"      → one-off reminder at 09:00 tomorrow (local)
@@ -47,8 +47,8 @@ async def set_reminder(ctx: RunContext[AgentDeps], time_expr: str, message: str)
 
     Args:
         time_expr: Natural language time expression (see examples above).
-            Pass the expression as-is using the user's local time — do NOT
-            pre-convert to UTC.  The tool resolves the timezone internally.
+            Pass the expression exactly as the user stated it.  The tool
+            resolves the timezone internally.
         message: The reminder text to send when the time arrives.
     """
     try:
@@ -81,5 +81,5 @@ async def set_reminder(ctx: RunContext[AgentDeps], time_expr: str, message: str)
         return f"Couldn't set reminder: {exc}"
 
     if fire_at:
-        return f"Reminder set for {fire_at.strftime('%Y-%m-%d %H:%M')} UTC: '{message}'"
-    return f"Recurring reminder scheduled (`{cron_expr}` UTC): '{message}'"
+        return f"Reminder set for {fire_at.strftime('%Y-%m-%d %H:%M')} local time: '{message}'"
+    return f"Recurring reminder scheduled (`{cron_expr}` local time): '{message}'"

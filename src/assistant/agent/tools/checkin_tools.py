@@ -34,12 +34,10 @@ async def schedule_checkin(
 
         "Local: 2026-06-01 20:50:00 (America/Guayaquil, UTC-5) | UTC: 2026-06-02 01:50:00"
 
-    Use the ``UTC:`` value directly as the reference point for all time
-    arithmetic.  Never guess the current time.  When the user says "in 5
-    minutes", take the UTC value, add 5 minutes, and pass that as
-    ``fire_at``.  When the user says "at 9am", assume they mean 9am in
-    their local timezone (shown in the ``Local:`` part) and convert to UTC
-    using the offset before setting ``cron_expr`` or ``fire_at``.
+    All time expressions are in the user's local timezone (America/Guayaquil,
+    UTC-5).  The tool handles all timezone conversion internally.  Do NOT
+    convert to UTC.  Pass the expression exactly as the user stated it.
+    Never guess the current time.
 
     Args:
         name: Short label for the check-in (e.g. "Morning Tasks").
@@ -48,13 +46,16 @@ async def schedule_checkin(
             "Summarise my open Vikunja tasks and flag any overdue ones."
         message: Direct message text to send (no LLM cost). Use this for
             simple reminders. Example: "Call mom" or "Drink water".
-        cron_expr: Standard 5-field cron expression for recurring jobs (UTC).
-            - "every day at 9am local"   → convert to UTC, e.g. "0 13 * * *"
-            - "every weekday at 8am"     → "0 8 * * 1-5" (after UTC conversion)
-            - "every Monday at 10am"     → "0 10 * * 1" (after UTC conversion)
-            - "every hour"               → "0 * * * *"
-        fire_at: ISO-8601 datetime (UTC) for a one-off job. Use this OR
-            cron_expr, not both. Example: "2026-06-01T14:30:00".
+        cron_expr: Standard 5-field cron expression for recurring jobs.
+            The tool converts local time to UTC internally.  Pass the
+            expression exactly as the user stated it.
+            - "every day at 9am"     → daily at 09:00 local
+            - "every weekday at 8am" → Monday–Friday at 08:00 local
+            - "every Monday at 10am" → Monday at 10:00 local
+            - "every hour"           → every hour on the hour
+        fire_at: ISO-8601 datetime for a one-off job. Use this OR
+            cron_expr, not both.  Pass local time; the tool converts to UTC.
+            Example: "2026-06-01T14:30:00".
         max_runs: Maximum number of times this check-in fires before
             auto-disabling. None = infinite. Set to 1 for one-off reminders.
     """
@@ -95,9 +96,9 @@ async def schedule_checkin(
     if checkin.fire_at:
         return (
             f"Check-in '{checkin.name}' scheduled for "
-            f"{checkin.fire_at.strftime('%Y-%m-%d %H:%M')} UTC."
+            f"{checkin.fire_at.strftime('%Y-%m-%d %H:%M')} local time."
         )
-    return f"Check-in '{checkin.name}' scheduled (`{checkin.cron_expr}` UTC)."
+    return f"Check-in '{checkin.name}' scheduled (`{checkin.cron_expr}` local time)."
 
 
 @tool(category="⏰ Check-ins")
@@ -136,3 +137,39 @@ async def remove_checkin(ctx: RunContext[AgentDeps], name: str) -> str:
 
     logger.info("remove_checkin_tool", name=name)
     return f"Check-in '{name}' removed."
+
+
+@tool(category="⏰ Check-ins")
+async def get_checkin_history(
+    ctx: RunContext[AgentDeps],
+    name: str,
+    limit: int = 10,
+) -> str:
+    """Show recent execution history for a check-in.
+
+    Use this when the user asks "did my check-in fire?" or
+    "show me the history of my morning check-in."
+
+    Args:
+        name: The exact name of the check-in.
+        limit: Maximum number of history entries to return (default 10).
+    """
+    checkin = await ctx.deps.checkin_repo.find_by_name(name)
+    if checkin is None:
+        return f"No check-in named '{name}' found."
+
+    history = await ctx.deps.checkin_repo.get_execution_history(checkin.id, limit=limit)
+    if not history:
+        return f"No execution history for '{name}' yet."
+
+    lines = [f"<b>History for '{name}'</b>"]
+    for record in history:
+        status = record["status"]
+        fired_at = record["fired_at"][:16].replace("T", " ")
+        if status == "success":
+            lines.append(f"✅ {fired_at} — succeeded")
+        else:
+            error = record.get("error_message") or "unknown error"
+            lines.append(f"❌ {fired_at} — failed: {error}")
+
+    return "\n".join(lines)

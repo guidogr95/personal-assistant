@@ -132,12 +132,25 @@ services:
     networks:
       - assistant_net
 
+  portainer:
+    image: portainer/portainer-ce:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    networks:
+      - assistant_net
+
 volumes:
   sqlite_data:
   notes_data:
   memory_data:
   vikunja_data:
   vikunja_db_data:
+  portainer_data:
 
 networks:
   assistant_net:

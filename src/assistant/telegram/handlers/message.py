@@ -36,6 +36,17 @@ async def on_message(
 
     user_id = message.from_user.id
 
+    # Show typing indicator while processing. Telegram auto-clears it when
+    # the actual reply message is sent, so no cleanup code is needed.
+    if message.chat:
+        try:
+            await agent_deps.bot.send_chat_action(
+                chat_id=message.chat.id,
+                action="typing",
+            )
+        except Exception:
+            logger.debug("typing_indicator_failed", exc_info=True)
+
     try:
         reply = await run_turn(
             user_id=user_id,

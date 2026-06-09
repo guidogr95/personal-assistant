@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
+from uuid import uuid4
 
 import structlog
 from aiogram import Bot
@@ -68,6 +70,8 @@ async def run_checkin(checkin_id: str) -> None:
 
     logger.info("checkin_firing", checkin_id=checkin_id, name=checkin.name)
     chat_id = settings.telegram_allowed_user_id
+    execution_id = str(uuid4())
+    fired_at = datetime.now(UTC)
 
     try:
         if checkin.message:
@@ -91,6 +95,16 @@ async def run_checkin(checkin_id: str) -> None:
         checkin.increment_run()
         await checkin_repo.update(checkin)
 
+        await checkin_repo.log_execution(
+            execution_id=execution_id,
+            checkin_id=checkin.id,
+            checkin_name=checkin.name,
+            fired_at=fired_at,
+            status="success",
+            error_message=None,
+            output_text=text,
+        )
+
         if checkin.has_reached_max_runs():
             checkin.disable()
             await checkin_repo.update(checkin)
@@ -107,6 +121,15 @@ async def run_checkin(checkin_id: str) -> None:
 
     except Exception as exc:
         logger.error("checkin_failed", checkin_id=checkin_id, name=checkin.name, error=str(exc))
+        await checkin_repo.log_execution(
+            execution_id=execution_id,
+            checkin_id=checkin.id,
+            checkin_name=checkin.name,
+            fired_at=fired_at,
+            status="failed",
+            error_message=str(exc),
+            output_text=None,
+        )
         try:
             fail_text = f"⚠️ Check-in {bold(checkin.name)} failed. See logs for details."
             await send_message(bot, fail_text, chat_id=chat_id)

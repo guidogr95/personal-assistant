@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from datetime import datetime
+from typing import Any
 
 from assistant.scheduler.domain.scheduled_checkin import ScheduledCheckIn
 
@@ -40,4 +42,27 @@ class ScheduledCheckInRepository(ABC):
     @abstractmethod
     async def delete(self, checkin_id: str) -> None:
         """Permanently remove a check-in record."""
+        ...
+
+    @abstractmethod
+    async def log_execution(
+        self,
+        execution_id: str,
+        checkin_id: str,
+        checkin_name: str,
+        fired_at: datetime,
+        status: str,
+        error_message: str | None,
+        output_text: str | None,
+    ) -> None:
+        """Record a check-in execution attempt."""
+        ...
+
+    @abstractmethod
+    async def get_execution_history(
+        self,
+        checkin_id: str,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """Return recent executions for a check-in, newest first."""
         ...
