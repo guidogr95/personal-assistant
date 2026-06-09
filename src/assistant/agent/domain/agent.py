@@ -38,8 +38,9 @@ def create_agent(
     model = OpenAIModel(model_name=settings.opencode_model, provider=provider)
     memory_server = create_memory_mcp_server()
 
-    return Agent(
+    return Agent[AgentDeps, str](
         model=model,
         system_prompt=system_prompt or (),
         toolsets=[memory_server],
+        deps_type=AgentDeps,
     )

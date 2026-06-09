@@ -63,7 +63,7 @@ async def main() -> None:
 
     # Auto-discover and register all routers. Order matters: errors first,
     # then specific command routers, then the catch-all message handler.
-    _ROUTER_PRIORITY: dict[str, int] = {
+    _router_priority: dict[str, int] = {
         "errors": 0,
         "session_commands": 1,
         "checkin_commands": 2,
@@ -74,7 +74,7 @@ async def main() -> None:
         "message": 99,
     }
     module_routers = discover_routers()
-    module_routers.sort(key=lambda item: _ROUTER_PRIORITY.get(item[0], 50))
+    module_routers.sort(key=lambda item: _router_priority.get(item[0], 50))
     for _name, router in module_routers:
         dp.include_router(router)
 
@@ -106,10 +106,15 @@ async def main() -> None:
     for tool_fn in ALL_TOOLS:
         agent.tool(tool_fn)
 
+    async def _run_agent_for_checkin(instructions: str) -> str:
+        """Run the agent with check-in instructions and return the text output."""
+        result = await agent.run(instructions, deps=agent_deps)
+        return result.output
+
     configure_checkin_runner(
         bot=bot,
         checkin_repo=checkin_repo,
-        run_agent=lambda instructions: agent.run(instructions, deps=agent_deps).output,
+        run_agent=_run_agent_for_checkin,
     )
     configure_transcription_queue(bot=bot, note_repo=note_repo)
     asyncio.create_task(start_worker())
